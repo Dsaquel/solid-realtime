@@ -1,55 +1,74 @@
-import { Accessor, createEffect, createResource, createUniqueId } from 'solid-js';
-import { createStore, produce } from 'solid-js/store'
+import { createStore, produce, SetStoreFunction } from "solid-js/store";
 import { SupabaseClient } from "@supabase/supabase-js";
 
-export function useWatcher(client: SupabaseClient, tables: string[], options = {}) {
-  //const [countries] = createResource(() => getCountries(client), { initialValue: [] });
+type GenericClient = {
+  getAll(table: string): Promise<any[]>;
+};
 
-  const [store, setStore] = createStore<Record<string, any[]>>({})
-
-  setStore(produce(async state => {
-    for (const table of tables)
-      state[table] = (await client.from(table).select()).data!;
-  }))
-
+export const supaConnector = (
+  client: SupabaseClient,
+  set: SetStoreFunction<Record<string, any[]>>
+): GenericClient => {
   client
-    .channel('schema-db-changes')
+    .channel("schema-db-changes")
     .on(
-      'postgres_changes',
+      "postgres_changes",
       {
-        event: '*',
-        schema: 'public',
+        event: "*",
+        schema: "public",
       },
       (payload) => {
-        setStore(produce(state => {
-          console.log(payload)
-          if (payload.eventType === 'INSERT') {
-            state[payload.table].push(payload.new)
-          }
-          else if (payload.eventType === 'UPDATE') {
-            const idx = state[payload.table].findIndex(s => s.id === payload.new.id)
-            if (idx === -1) return
-            state[payload.table][idx] = payload.new
-          } else {
-            const idx = state[payload.table].findIndex(s => s.id === payload.old.id)
-            if (idx === -1) return
-            state[payload.table].splice(idx, 1)
-          }
-        }))
+        set(
+          produce((state) => {
+            console.log(payload);
+            if (payload.eventType === "INSERT") {
+              state[payload.table].push(payload.new);
+            } else if (payload.eventType === "UPDATE") {
+              const idx = state[payload.table].findIndex(
+                (s) => s.id === payload.new.id
+              );
+              if (idx === -1) return;
+              state[payload.table][idx] = payload.new;
+            } else {
+              const idx = state[payload.table].findIndex(
+                (s) => s.id === payload.old.id
+              );
+              if (idx === -1) return;
+              state[payload.table].splice(idx, 1);
+            }
+          })
+        );
       }
     )
-    .subscribe()
+    .subscribe();
 
+  return {
+    async getAll(table: string) {
+      return (await client.from(table).select()).data!;
+    },
+  };
+};
 
-  const _client = client
-  const _options = options
+export function useWatcher<T>(
+  client: T,
+  tables: string[],
+  clientProvider: (
+    client: T,
+    set: SetStoreFunction<Record<string, any[]>>
+  ) => GenericClient
+) {
+  const [store, setStore] = createStore<Record<string, any[]>>({});
 
-  //listen(table_name: string) {
-  //  const [, setStore] = store
-  //  setStore(produce(fn))
-  //}
+  const initializedClient = clientProvider(client, setStore);
+
+  setStore(
+    produce(async (state) => {
+      for (const table of tables)
+        state[table] = await initializedClient.getAll(table);
+    })
+  );
 
   return {
     store,
-  }
+  };
 }
