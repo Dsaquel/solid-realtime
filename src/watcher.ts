@@ -5,10 +5,12 @@ type GenericClient = {
   getAll(table: string): Promise<any[]>;
 };
 
-export const supaConnector = (
-  client: SupabaseClient,
+type ClientProvider<T> = (
+  client: T,
   set: SetStoreFunction<Record<string, any[]>>
-): GenericClient => {
+) => GenericClient;
+
+export const supaConnector: ClientProvider<SupabaseClient> = (client, set) => {
   client
     .channel("schema-db-changes")
     .on(
@@ -52,10 +54,7 @@ export const supaConnector = (
 export function useWatcher<T>(
   client: T,
   tables: string[],
-  clientProvider: (
-    client: T,
-    set: SetStoreFunction<Record<string, any[]>>
-  ) => GenericClient
+  clientProvider: ClientProvider<T> = supaConnector as any
 ) {
   const [store, setStore] = createStore<Record<string, any[]>>({});
 
