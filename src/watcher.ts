@@ -20,6 +20,18 @@ type QueryType =
 
 type TableSelector = string | QueryType;
 
+function addElement(collection: any[], elem: any) {
+  collection.push(elem);
+}
+
+function editElement(collection: any[], index: number, elem: any) {
+  collection[index] = elem;
+}
+
+function deleteElement(collection: any[], index: number) {
+  collection.splice(index, 1);
+}
+
 export const supaConnector = (
   client: SupabaseClient,
   tablesMap: Map<string, string[]>,
@@ -35,36 +47,32 @@ export const supaConnector = (
         schema: "public",
       },
       (payload) => {
-        console.log(payload);
         set(
           produce(async (state) => {
-            console.log(payload);
             for (const customTable of tablesMap.get(payload.table) ?? []) {
               const filter = filters[customTable] ?? (() => true);
-              console.log(filters);
               if (payload.eventType === "INSERT") {
                 if (filter(payload.new)) {
-                  state[customTable].push(payload.new);
+                  addElement(state[customTable], payload.new);
                 }
               } else if (payload.eventType === "UPDATE") {
                 const idx = state[customTable].findIndex(
                   (s) => s.id === payload.new.id
                 );
-                if (idx !== -1) {
-                  if (filter(payload.new)) {
-                    state[customTable][idx] = payload.new;
-                  } else {
-                    state[customTable].splice(idx, 1);
-                  }
+
+                if (idx !== -1 && filter(payload.new)) {
+                  editElement(state[customTable], idx, payload.new);
+                } else if (idx !== -1) {
+                  deleteElement(state[customTable], idx);
                 } else if (filter(payload.new)) {
-                  state[customTable].push(payload.new);
+                  addElement(state[customTable], payload.new);
                 }
               } else {
                 const idx = state[customTable].findIndex(
                   (s) => s.id === payload.old.id
                 );
                 if (idx === -1) return;
-                state[customTable].splice(idx, 1);
+                deleteElement(state[customTable], idx);
               }
             }
           })
@@ -82,10 +90,7 @@ export const supaConnector = (
       const init =
         query ?? (async () => (await client.from(table).select()).data!);
       const data = await init();
-      console.log("DATA: ", data);
-      console.log("FILTERS: ", filters);
       const filter = filters[customTable];
-      console.log("CUSTOM TABLE", customTable);
       return filter ? data.filter(filter) : data;
     },
   };
@@ -101,7 +106,6 @@ export function useWatcher<T>(
     filters: Record<string, ((item: any) => boolean) | undefined>
   ) => GenericClient
 ) {
-  console.log("HELLO WATCHER");
   const [store, setStore] = createStore<Record<string, any[]>>({});
 
   let tablesMap = new Map<string, string[]>();
