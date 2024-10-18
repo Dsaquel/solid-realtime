@@ -49,7 +49,7 @@ Steps to install the project locally.
 
    **Examlpe for supabase:**
 
-    Prerequisites: follow this [tutorial](https://supabase.com/docs/guides/getting-started/quickstarts/solidjs) on website supabase.
+    Prerequisites: follow this [tutorial](https://supabase.com/docs/guides/getting-started/quickstarts/solidjs) on supabase website.
 
     And now in your solid.js project:
 
