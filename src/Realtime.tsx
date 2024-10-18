@@ -1,1 +1,1 @@
-export { useWatcher, supaConnector } from '@/Watcher';
+export { useWatcher, supaConnector } from "@/Watcher";
