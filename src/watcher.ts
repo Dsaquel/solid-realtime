@@ -42,18 +42,23 @@ export const supaConnector = (
             for (const customTable of tablesMap.get(payload.table) ?? []) {
               const filter = filters[customTable] ?? (() => true);
               console.log(filters);
-              if (!filter(payload.new)) {
-                continue;
-              }
-
               if (payload.eventType === "INSERT") {
-                state[customTable].push(payload.new);
+                if (filter(payload.new)) {
+                  state[customTable].push(payload.new);
+                }
               } else if (payload.eventType === "UPDATE") {
                 const idx = state[customTable].findIndex(
                   (s) => s.id === payload.new.id
                 );
-                if (idx === -1) return;
-                state[customTable][idx] = payload.new;
+                if (idx !== -1) {
+                  if (filter(payload.new)) {
+                    state[customTable][idx] = payload.new;
+                  } else {
+                    state[customTable].splice(idx, 1);
+                  }
+                } else if (filter(payload.new)) {
+                  state[customTable].push(payload.new);
+                }
               } else {
                 const idx = state[customTable].findIndex(
                   (s) => s.id === payload.old.id
@@ -79,7 +84,9 @@ export const supaConnector = (
       const data = await init();
       console.log("DATA: ", data);
       console.log("FILTERS: ", filters);
-      return data;
+      const filter = filters[customTable];
+      console.log("CUSTOM TABLE", customTable);
+      return filter ? data.filter(filter) : data;
     },
   };
 };
@@ -94,6 +101,7 @@ export function useWatcher<T>(
     filters: Record<string, ((item: any) => boolean) | undefined>
   ) => GenericClient
 ) {
+  console.log("HELLO WATCHER");
   const [store, setStore] = createStore<Record<string, any[]>>({});
 
   let tablesMap = new Map<string, string[]>();
