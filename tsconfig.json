@@ -1,20 +1,16 @@
 {
+  "include": ["src"],
+  "exclude": ["**/*.test.ts"],
   "compilerOptions": {
-    "skipLibCheck": true,
+    "module": "esnext",
+    "target": "esnext",
+    "lib": ["esnext"],
+    "declaration": true,
     "strict": true,
-    "target": "ESNext",
-    "module": "ESNext",
     "moduleResolution": "node",
-    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
     "esModuleInterop": true,
-    "jsx": "preserve",
-    "jsxImportSource": "solid-js",
-    "types": ["vite/client"],
-    "noEmit": true,
-    "isolatedModules": true,
-    "paths": {
-      "@/*": ["./src/*"]
-    }
+    "outDir": "dist",
+    "rootDir": "src"
   }
 }
-
