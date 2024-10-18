@@ -15,7 +15,11 @@ type ClientProvider<T> = (
   set: SetStoreFunction<Record<string, any[]>>
 ) => GenericClient;
 
-export const supaConnector: ClientProvider<SupabaseClient> = (client, tablesMap, set) => {
+export const supaConnector: ClientProvider<SupabaseClient> = (
+  client,
+  tablesMap,
+  set
+) => {
   client
     .channel("schema-db-changes")
     .on(

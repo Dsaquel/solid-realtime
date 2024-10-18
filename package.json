@@ -1,21 +1,43 @@
 {
-  "name": "vite-template-solid",
+  "name": "realtime",
   "version": "0.0.0",
-  "description": "",
+  "description": "Solid Realtime is a library that allows you to connect and manage real-time data from different services like Supabase, Firebase, etc.",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "start": "vite",
-    "dev": "vite",
-    "build": "vite build",
-    "serve": "vite preview"
+    "js:build": "tsup",
+    "js:dev": "tsup --watch",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs",
+    "build": "npm run js:build && npm run docs:build"
   },
+  "keywords": [
+    "typescript",
+    "library"
+  ],
+  "author": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/my-ts-library"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/my-ts-library/issues"
+  },
+  "homepage": "https://github.com/your-username/my-ts-library#readme",
   "devDependencies": {
-    "solid-devtools": "^0.29.2",
-    "vite": "^5.0.11",
-    "vite-plugin-solid": "^2.8.2"
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.3",
+    "vitepress": "^1.4.1"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.4",
-    "solid-js": "^1.8.11"
+    "@supabase/supabase-js": "^2.45.5",
+    "@types/node": "^22.7.6",
+    "solid-js": "^1.9.2"
   }
 }
