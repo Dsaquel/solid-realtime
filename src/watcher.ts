@@ -2,17 +2,29 @@ import { createStore, produce, SetStoreFunction } from "solid-js/store";
 import { SupabaseClient } from "@supabase/supabase-js";
 
 type GenericClient = {
-  get(table: string, query?: () => Promise<any[]>): Promise<any[]>;
+  get(
+    table: string,
+    customTable?: string,
+    query?: () => Promise<any[]>
+  ): Promise<any[]>;
 };
 
-type QueryType = [string, string, (() => Promise<any[]>) | undefined];
+type QueryType =
+  | string
+  | {
+      customTable: string;
+      table: string;
+      query?: () => Promise<any[]>;
+      filter?: (item: any) => boolean;
+    };
 
 type TableSelector = string | QueryType;
 
 export const supaConnector = (
   client: SupabaseClient,
   tablesMap: Map<string, string[]>,
-  set: SetStoreFunction<Record<string, any[]>>
+  set: SetStoreFunction<Record<string, any[]>>,
+  filters: Record<string, ((item: any) => boolean) | undefined>
 ): GenericClient => {
   client
     .channel("schema-db-changes")
@@ -25,10 +37,15 @@ export const supaConnector = (
       (payload) => {
         console.log(payload);
         set(
-          produce((state) => {
+          produce(async (state) => {
             console.log(payload);
-
             for (const customTable of tablesMap.get(payload.table) ?? []) {
+              const filter = filters[customTable] ?? (() => true);
+              console.log(filters);
+              if (!filter(payload.new)) {
+                continue;
+              }
+
               if (payload.eventType === "INSERT") {
                 state[customTable].push(payload.new);
               } else if (payload.eventType === "UPDATE") {
@@ -52,10 +69,17 @@ export const supaConnector = (
     .subscribe();
 
   return {
-    async get(table: string, query?: () => Promise<any[]>): Promise<any[]> {
+    async get(
+      customTable: string,
+      table: string,
+      query?: () => Promise<any[]>
+    ): Promise<any[]> {
       const init =
-        query || (async () => (await client.from(table).select()).data!);
-      return await init();
+        query ?? (async () => (await client.from(table).select()).data!);
+      const data = await init();
+      console.log("DATA: ", data);
+      console.log("FILTERS: ", filters);
+      return data;
     },
   };
 };
@@ -66,17 +90,20 @@ export function useWatcher<T>(
   clientProvider: (
     client: T,
     tablesMap: Map<string, string[]>,
-    set: SetStoreFunction<Record<string, any[]>>
+    set: SetStoreFunction<Record<string, any[]>>,
+    filters: Record<string, ((item: any) => boolean) | undefined>
   ) => GenericClient
 ) {
   const [store, setStore] = createStore<Record<string, any[]>>({});
 
   let tablesMap = new Map<string, string[]>();
+  let filters: Record<string, ((item: any) => boolean) | undefined> = {};
   for (const tableSelector of tables) {
-    let customTable, table;
+    let customTable: string, table: string;
     if (typeof tableSelector !== "string") {
-      customTable = tableSelector[0];
-      table = tableSelector[1];
+      customTable = tableSelector.customTable;
+      table = tableSelector.table;
+      filters[customTable] = tableSelector.filter;
     } else {
       customTable = tableSelector;
       table = tableSelector;
@@ -86,7 +113,12 @@ export function useWatcher<T>(
       tablesMap.set(table, [customTable]);
   }
 
-  const initializedClient = clientProvider(client, tablesMap, setStore);
+  const initializedClient = clientProvider(
+    client,
+    tablesMap,
+    setStore,
+    filters
+  );
 
   setStore(
     produce(async (state) => {
@@ -96,11 +128,15 @@ export function useWatcher<T>(
           customTable = tableSelector;
           table = customTable;
         } else {
-          customTable = tableSelector[0];
-          table = tableSelector[1];
-          query = tableSelector[2];
+          customTable = tableSelector.customTable;
+          table = tableSelector.table;
+          query = tableSelector.query;
         }
-        state[customTable] = await initializedClient.get(table, query);
+        state[customTable] = await initializedClient.get(
+          customTable,
+          table,
+          query
+        );
       }
     })
   );
