@@ -1,31 +1,73 @@
 import { createStore, produce, SetStoreFunction } from "solid-js/store";
 import { SupabaseClient } from "@supabase/supabase-js";
+import {
+  onSnapshot,
+  collection,
+  query,
+  Firestore,
+  Query,
+  DocumentData,
+} from "@firebase/firestore";
 
-type GenericClient = {
-  get(
-    table: string,
-    customTable?: string,
-    query?: () => Promise<any[]>
-  ): Promise<any[]>;
-};
-
-type QueryType =
+type QueryType<X> =
   | string
   | {
-      customTable: string;
+      name: string;
       table: string;
-      query?: () => Promise<any[]>;
+      query?: X;
       filter?: (item: any) => boolean;
     };
 
-type TableSelector = string | QueryType;
+type TableSelector<X> = string | QueryType<X>;
 
-export const supaConnector = (
-  client: SupabaseClient,
-  tablesMap: Map<string, string[]>,
-  set: SetStoreFunction<Record<string, any[]>>,
-  filters: Record<string, ((item: any) => boolean) | undefined>
-): GenericClient => {
+type ClientProvider<T, X> = (
+  client: T,
+  tables: TableSelector<X>[],
+  set: SetStoreFunction<Record<string, any[]>>
+) => void;
+
+function addElement(collection: any[], elem: any) {
+  collection.push(elem);
+}
+
+function editElement(collection: any[], index: number, elem: any) {
+  collection[index] = elem;
+}
+
+function deleteElement(collection: any[], index: number) {
+  collection.splice(index, 1);
+}
+
+export const supaConnector: ClientProvider<SupabaseClient, () => any[]> = (
+  client,
+  tables,
+  set
+) => {
+  const tablesMap = new Map<string, string[]>();
+  const filters: Record<string, ((item: any) => boolean) | undefined> = {};
+
+  set(
+    produce(async (state) => {
+      for (const tableSelector of tables) {
+        let name, query, table: string;
+        if (typeof tableSelector !== "string") {
+          name = tableSelector.name;
+          table = tableSelector.table;
+          query = tableSelector.query;
+          filters[name] = tableSelector.filter;
+        } else {
+          name = tableSelector;
+          table = tableSelector;
+          query = async () => (await client.from(table).select()).data!;
+        }
+
+        tablesMap.get(table)?.push(name) ||
+          tablesMap.set(table, [name]);
+        state[name] = (await query?.()) ?? [];
+      }
+    })
+  );
+
   client
     .channel("schema-db-changes")
     .on(
@@ -35,36 +77,33 @@ export const supaConnector = (
         schema: "public",
       },
       (payload) => {
-        console.log(payload);
         set(
-          produce(async (state) => {
-            console.log(payload);
-            for (const customTable of tablesMap.get(payload.table) ?? []) {
-              const filter = filters[customTable] ?? (() => true);
-              console.log(filters);
+          produce((state) => {
+            for (const name of tablesMap.get(payload.table) ?? []) {
+              const filter = filters[name] ?? (() => true);
               if (payload.eventType === "INSERT") {
                 if (filter(payload.new)) {
-                  state[customTable].push(payload.new);
+                  addElement(state[name], payload.new);
                 }
               } else if (payload.eventType === "UPDATE") {
-                const idx = state[customTable].findIndex(
+                const idx = state[name].findIndex(
                   (s) => s.id === payload.new.id
                 );
                 if (idx !== -1) {
                   if (filter(payload.new)) {
-                    state[customTable][idx] = payload.new;
+                    editElement(state[name], idx, payload.new);
                   } else {
-                    state[customTable].splice(idx, 1);
+                    deleteElement(state[name], idx);
                   }
                 } else if (filter(payload.new)) {
-                  state[customTable].push(payload.new);
+                  addElement(state[name], payload.new);
                 }
               } else {
-                const idx = state[customTable].findIndex(
+                const idx = state[name].findIndex(
                   (s) => s.id === payload.old.id
                 );
                 if (idx === -1) return;
-                state[customTable].splice(idx, 1);
+                deleteElement(state[name], idx);
               }
             }
           })
@@ -72,82 +111,70 @@ export const supaConnector = (
       }
     )
     .subscribe();
-
-  return {
-    async get(
-      customTable: string,
-      table: string,
-      query?: () => Promise<any[]>
-    ): Promise<any[]> {
-      const init =
-        query ?? (async () => (await client.from(table).select()).data!);
-      const data = await init();
-      console.log("DATA: ", data);
-      console.log("FILTERS: ", filters);
-      const filter = filters[customTable];
-      console.log("CUSTOM TABLE", customTable);
-      return filter ? data.filter(filter) : data;
-    },
-  };
 };
 
-export function useWatcher<T>(
+export const firestoreConnector: ClientProvider<
+  Firestore,
+  Query<DocumentData, DocumentData>
+> = (db, tables, set) => {
+  for (const selector of tables) {
+    let q: Query<DocumentData, DocumentData> | undefined;
+    let name, filter;
+
+    if (typeof selector === "string") {
+      name = selector;
+      q = query(collection(db, selector));
+      filter = () => true;
+    } else {
+      name = selector.name;
+      q = selector.query;
+      filter = selector.filter ?? (() => true);
+    }
+    if (!q) return;
+
+    set(name, []);
+
+    onSnapshot(q, (snap) => {
+      snap.docChanges().forEach((change) => {
+        const data = change.doc
+        const id = change.doc.id;
+        set(
+          produce((state) => {
+            if (change.type === "added") {
+              if (filter(change.doc.data())) {
+                addElement(state[name], data)
+              }
+            } else if (change.type === "modified") {
+              const idx = state[name].findIndex((s) => s.id === id);
+              if (idx !== -1) {
+                if (filter(data)) {
+                  editElement(state[name], idx, data)
+                } else {
+                  deleteElement(state[name], idx);
+                }
+              } else if (filter(data)) {
+                addElement(state[name], data)
+              }
+            } else {
+              const idx = state[name].findIndex((s) => s.id === id);
+              if (idx === -1) return;
+              deleteElement(state[name], idx);
+            }
+          })
+        );
+      });
+    });
+  }
+};
+
+export function useWatcher<T, X>(
   client: T,
-  tables: TableSelector[],
-  clientProvider: (
-    client: T,
-    tablesMap: Map<string, string[]>,
-    set: SetStoreFunction<Record<string, any[]>>,
-    filters: Record<string, ((item: any) => boolean) | undefined>
-  ) => GenericClient
+  tables: TableSelector<X>[],
+  clientProvider: ClientProvider<T, X> = supaConnector as any
 ) {
-  console.log("HELLO WATCHER");
   const [store, setStore] = createStore<Record<string, any[]>>({});
 
-  let tablesMap = new Map<string, string[]>();
-  let filters: Record<string, ((item: any) => boolean) | undefined> = {};
-  for (const tableSelector of tables) {
-    let customTable: string, table: string;
-    if (typeof tableSelector !== "string") {
-      customTable = tableSelector.customTable;
-      table = tableSelector.table;
-      filters[customTable] = tableSelector.filter;
-    } else {
-      customTable = tableSelector;
-      table = tableSelector;
-    }
-
-    tablesMap.get(table)?.push(customTable) ||
-      tablesMap.set(table, [customTable]);
-  }
-
-  const initializedClient = clientProvider(
-    client,
-    tablesMap,
-    setStore,
-    filters
-  );
-
-  setStore(
-    produce(async (state) => {
-      for (const tableSelector of tables) {
-        let customTable, table, query;
-        if (typeof tableSelector === "string") {
-          customTable = tableSelector;
-          table = customTable;
-        } else {
-          customTable = tableSelector.customTable;
-          table = tableSelector.table;
-          query = tableSelector.query;
-        }
-        state[customTable] = await initializedClient.get(
-          customTable,
-          table,
-          query
-        );
-      }
-    })
-  );
+  clientProvider(client, tables, setStore);
 
   return {
     store,

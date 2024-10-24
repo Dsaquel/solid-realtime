@@ -36,6 +36,7 @@
     "vitepress": "^1.4.1"
   },
   "dependencies": {
+    "@firebase/firestore": "^4.7.3",
     "@supabase/supabase-js": "^2.45.5",
     "@types/node": "^22.7.6",
     "solid-js": "^1.9.2"

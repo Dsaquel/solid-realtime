@@ -1,1 +1,1 @@
-export { useWatcher, supaConnector } from "./watcher";
+export { useWatcher, supaConnector, firestoreConnector } from "./watcher";
