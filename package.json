@@ -1,6 +1,6 @@
 {
   "name": "realtime",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Solid Realtime is a library that allows you to connect and manage real-time data from different services like Supabase, Firebase, etc.",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -9,8 +9,8 @@
     "dist"
   ],
   "scripts": {
-    "js:build": "tsup",
-    "js:dev": "tsup --watch",
+    "ts:build": "tsup",
+    "ts:dev": "tsup --watch",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
@@ -24,12 +24,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/my-ts-library"
+    "url": "git+https://github.com/Dsaquel/solid-realtime.git"
   },
   "bugs": {
-    "url": "https://github.com/your-username/my-ts-library/issues"
+    "url": "git+https://github.com/Dsaquel/solid-realtime.git/issues"
   },
-  "homepage": "https://github.com/your-username/my-ts-library#readme",
+  "homepage": "git+https://github.com/Dsaquel/solid-realtime.git#readme",
   "devDependencies": {
     "tsup": "^8.3.0",
     "typescript": "^5.6.3",
