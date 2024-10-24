@@ -1,5 +1,5 @@
 {
-  "name": "realtime",
+  "name": "solid-realtime",
   "version": "1.0.0",
   "description": "Solid Realtime is a library that allows you to connect and manage real-time data from different services like Supabase, Firebase, etc.",
   "main": "dist/index.js",
