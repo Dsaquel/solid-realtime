@@ -1,0 +1,23 @@
+services:
+  db:
+    image: postgres:16
+    user: postgres
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: user
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - 127.0.0.1:5432:5432
+    healthcheck:
+      test: ["CMD", "pg_isready"]
+      start_period: 60s
+      interval: 6s
+      timeout: 6s
+      retries: 10
+
+volumes:
+  db-data:
+
