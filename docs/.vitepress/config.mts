@@ -2,6 +2,7 @@ import { defineConfig } from "vitepress";
 
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
+  base: "/solid-realtime/",
   title: "Solid RealTime",
   description: "The best solution to manage your data in real time.",
   themeConfig: {
