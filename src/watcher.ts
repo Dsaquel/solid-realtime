@@ -13,11 +13,11 @@ import { PrismaClient } from "@prisma/client";
 type QueryType<X> =
   | string
   | {
-      name: string;
-      table: string;
-      query?: X;
-      filter?: (item: any) => boolean;
-    };
+    name: string;
+    table: string;
+    query?: X;
+    filter?: (item: any) => boolean;
+  };
 
 type TableSelector<X> = string | QueryType<X>;
 
@@ -27,7 +27,7 @@ type ClientProvider<T, X> = (
   set: SetStoreFunction<Record<string, any[]>>
 ) => void;
 
-const prisma = new PrismaClient();
+const prisma = undefined
 
 interface PrismaPayload {
   type: "INSERT" | "UPDATE" | "DELETE";
@@ -192,7 +192,7 @@ async function softDelete(id: number, table: keyof typeof prisma) {
 async function pollDatabaseChanges(
   tables: string[] = ["Country"],
   intervalSeconds: number = 5,
-  callback: (payload: PrismaPayload) => void = () => {}
+  callback: (payload: PrismaPayload) => void = () => { }
 ) {
   // Keep track of the last check time
   let lastCheckTime = new Date();
@@ -296,9 +296,10 @@ async function pollDatabaseChanges(
 }
 
 async function pollFromPostgrest(
+  baseUrl: string,
   tables: string[] = ["countries"],
   intervalSeconds: number = 5,
-  callback: (payload: PostgrestPayload) => void = () => {}
+  callback: (payload: PostgrestPayload) => void = () => { }
 ) {
   // Keep track of the last check time
   let lastCheckTime = new Date();
@@ -309,22 +310,24 @@ async function pollFromPostgrest(
     try {
       const changes: PostgrestPayload[] = [];
       const currentCheckTime = new Date();
+      const timestampDate = currentCheckTime.toISOString()
 
       for (const table of tables) {
         const model = (route: string) =>
-          fetch(`http://localhost:3000/${route}`).then((s) => s.json()) as any;
+          fetch(`${baseUrl}/${route}`).then((s) => s.json()) as any;
 
+      
         // maybe need to change date
         const created = await model(
-          `${table}?created_at=gte.${lastCheckTime}&deleted_at=is.null`
+          `${table}?created_at=gte.${timestampDate}&deleted_at=is.null`
         );
 
         const updated = await model(
-          `${table}?created_at=lt.${lastCheckTime}&updated_at=gte.${lastCheckTime}&deleted_at=is.null`
+          `${table}?created_at=lt.${timestampDate}&updated_at=gte.${timestampDate}&deleted_at=is.null`
         );
 
         const deleted = await model(
-          `${table}?&deleted_at=gte.${lastCheckTime}`
+          `${table}?&deleted_at=gte.${timestampDate}`
         );
 
         // Add changes to our collection
@@ -466,7 +469,7 @@ export const postgrestConnector: ClientProvider<string, () => any> = (
         } else {
           name = tableSelector;
           table = tableSelector;
-          query = async () => []; //;
+          query = async () => await fetch(`${client}/${table}`).then((s => s.json()));
         }
 
         tablesMap.get(table)?.push(name) || tablesMap.set(table, [name]);
@@ -482,7 +485,7 @@ export const postgrestConnector: ClientProvider<string, () => any> = (
       return table;
     }
   });
-  pollFromPostgrest(postgrestTables, 5, (payload: PostgrestPayload) => {
+  pollFromPostgrest(client, postgrestTables, 5, (payload: PostgrestPayload) => {
     set(
       produce((state) => {
         for (const name of tablesMap.get(payload.table) ?? []) {

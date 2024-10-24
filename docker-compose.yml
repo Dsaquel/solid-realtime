@@ -18,6 +18,16 @@ services:
       timeout: 6s
       retries: 10
 
+  server:
+    image: postgrest/postgrest
+    ports:
+      - "3000:3000"
+    environment:
+      PGRST_DB_URI: postgres://authenticator:mysecretpassword@db:5432/postgres
+      PGRST_DB_ANON_ROLE: "web_anon"
+    depends_on:
+      - db
+
 volumes:
   db-data:
 

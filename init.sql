@@ -41,3 +41,10 @@ INSERT INTO countries (name)
     ('France'),
     ('Canada');
 
+create role web_anon nologin;
+
+grant usage on schema public to web_anon;
+grant select, insert, delete, update on public.countries to web_anon;
+
+create role authenticator noinherit login password 'mysecretpassword';
+grant web_anon to authenticator;
