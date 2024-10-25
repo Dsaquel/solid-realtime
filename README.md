@@ -15,9 +15,11 @@ Solid Realtime is a library that allows you to connect and manage real-time data
 ## Features
 
 - Supabase: Supabase allows you to subscribe to real-time changes on your database from your client application. You can listen to database changes.
-- Firebase:
-- DynamoDB:
-- PostgreSQL:
+- Firebase: Firebase provides a suite of cloud-based services to help you build and run applications. With Firebase Realtime Database, you can store and sync data between your users in real-time. It allows you to listen to data changes and update your application instantly.
+- RowSQL: In commin.
+- Prisma: Prisma is an open-source ORM (Object-Relational Mapping) tool that simplifies database access. It provides a type-safe query builder and supports various databases, including PostgreSQL, MySQL, and SQLite. Prisma helps you write clean and maintainable database queries, making it easier to interact with your database in a type-safe manner.
+
+Solid-Realtime: Allows you to create a reactive store from the database.
 
 ## Installation
 
@@ -25,55 +27,45 @@ Steps to install the project locally.
 
 ### Installation Steps
 
-1. Clone the repository:
+1. Install the dependencies:
 
     ```bash
-    git clone https://github.com/Dsaquel/solid-realtime.git
+    npm install solid-realtime # or pnpm install or yarn install
     ```
 
-2. Navigate into the project directory:
+2. Set up the environment (see the [Configuration](#configuration) section below).
 
-    ```bash
-    cd solid-realtime
-    ```
+3. Try to use library:
 
-3. Install the dependencies:
-
-    ```bash
-    npm install # or pnpm install or yarn install
-    ```
-
-4. Set up the environment (see the [Configuration](#configuration) section below).
-
-5. Try to use library:
-
-   **Examlpe for supabase:**
+   **Example for supabase:**
 
     Prerequisites: follow this [tutorial](https://supabase.com/docs/guides/getting-started/quickstarts/solidjs) on supabase website.
 
     And now in your solid.js project:
 
     ```jsx
-    import { createClient } from "@supabase/supabase-js";
     import { For } from "solid-js";
-    
+    import { createClient } from "@supabase/supabase-js";
     import { useWatcher, supaConnector } from "solid-realtime";
 
-    const client = createClient(import.meta.env.VITE_SUPA_PROJECT, import.meta.env.VITE_SUPA_ANON);
+    const client = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON);
 
-    function App() {
-    const { store } = useWatcher(client, ["countries"], supaConnector)
+    function Home() {
+        const { store } = useWatcher(client, ["countries"], supaConnector)
         return (
             <ul>
+                All countries:
                 <For each={store.countries}>{(country) => <li>{country.name}</li>}</For>
             </ul>
         );
     }
 
-    export default App;
+    export default Home;
     ```
 
 #### Learn more on the [Solid Website](https://solidjs.com) and come chat with us on our [Discord](https://discord.com/invite/solidjs)
+
+See more in the documentation [(here)](https://dsaquel.github.io/solid-realtime/)
 
 ## Usage
 
@@ -110,8 +102,22 @@ Explain how to configure any settings or environment variables, for example:
 2. Add the following environment variables:
 
     ```bash
+    # Supabase
     VITE_SUPABASE_URL=https://<project>.supabase.co
     VITE_SUPABASE_ANON=*****************************
+
+    or 
+
+    # SLQlite
+    DATABASE_URL="file:./dev.db"
+
+    or
+
+    # Postgres
+    POSTGRES_USR="someuser"
+    POSTGRES_PWD="somepwd"
+    POSTGRES_DB="somedb"
+    POSTGRES_URL="postgres://${POSTGRES_USR}:${POSTGRES_PWD}@postgres:5432/${POSTGRES_DB}
     ```
 
 ## Contributing
@@ -126,12 +132,12 @@ Contributions are welcome! Here's how to contribute:
 
 ## License
 
-This project is licensed under the [License Name] - see the LICENSE file for details.
+This project is licensed under the MIT - see the LICENSE file for details.
 
 ## Contact
 
-- Name - [@TwitterHandle](https://twitter.com/twitterhandle) - <email@example.com>
-- Name - [@TwitterHandle](https://twitter.com/twitterhandle) - <email@example.com>
-- Name - [@TwitterHandle](https://twitter.com/twitterhandle) - <email@example.com>
+- Ouways - [@GitHub Profile](https://github.com/Dsaquel) - <noblet.ouwaysgta5@gmail.com>
+- Dimitri - [@GitHub Profile](https://github.com/dimitri-donatien) - <donatien.dim@protonmail.com>
+- Jean François - [@GitHub Profile](https://github.com/jleon9) - <j-f.leon@outlook.com>
 
 Project Link: [Solid RealTime](https://github.com/Dsaquel/solid-realtime)
