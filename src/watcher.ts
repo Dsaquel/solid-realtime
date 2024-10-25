@@ -27,8 +27,6 @@ type ClientProvider<T, X> = (
   set: SetStoreFunction<Record<string, any[]>>
 ) => void;
 
-const prisma = new PrismaClient();
-
 interface PrismaPayload {
   type: "INSERT" | "UPDATE" | "DELETE";
   table: string;
@@ -182,7 +180,11 @@ export const firestoreConnector: ClientProvider<
   }
 };
 
-async function softDelete(id: number, table: keyof typeof prisma) {
+async function softDelete(
+  prisma: PrismaClient,
+  id: number,
+  table: keyof PrismaClient
+) {
   return (prisma[table] as any).update({
     where: { id },
     data: { deletedAt: new Date() },
@@ -190,6 +192,7 @@ async function softDelete(id: number, table: keyof typeof prisma) {
 }
 
 async function pollDatabaseChanges(
+  client: PrismaClient,
   tables: string[] = ["Country"],
   intervalSeconds: number = 5,
   callback: (payload: PrismaPayload) => void = () => {}
@@ -203,11 +206,12 @@ async function pollDatabaseChanges(
     try {
       const changes: PrismaPayload[] = [];
       const currentCheckTime = new Date();
+      console.log("new checkpoint:", currentCheckTime);
 
       // Check each table for changes
       for (const table of tables) {
         // Type assertion for dynamic table access
-        const model = prisma[table.toLowerCase() as keyof typeof prisma] as any;
+        const model = client[table.toLowerCase() as keyof PrismaClient] as any;
 
         // Find created records
         const created = await model.findMany({
@@ -411,7 +415,7 @@ export const prismaConnector: ClientProvider<
       return table;
     }
   });
-  pollDatabaseChanges(prismaTables, 5, (payload: PrismaPayload) => {
+  pollDatabaseChanges(client, prismaTables, 5, (payload: PrismaPayload) => {
     set(
       produce((state) => {
         for (const name of tablesMap.get(payload.table) ?? []) {
