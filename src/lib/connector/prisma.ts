@@ -19,7 +19,7 @@ async function pollDatabaseChanges(
   client: PrismaClient,
   tables: string[] = ["Country"],
   intervalSeconds: number = 5,
-  callback: (payload: PrismaPayload) => void = () => {}
+  callback: (payload: PrismaPayload) => void = () => { }
 ) {
   // Keep track of the last check time
   let lastCheckTime = new Date();
@@ -38,7 +38,7 @@ async function pollDatabaseChanges(
         const model = client[table.toLowerCase() as keyof PrismaClient] as any;
 
         // Find created records
-        const created = await model.findMany({
+        const createdPromise = model.findMany({
           where: {
             deletedAt: null,
             createdAt: {
@@ -48,7 +48,7 @@ async function pollDatabaseChanges(
         });
 
         // Find updated records
-        const updated = await model.findMany({
+        const updatedPromise = model.findMany({
           where: {
             deletedAt: null,
             updatedAt: {
@@ -61,13 +61,15 @@ async function pollDatabaseChanges(
         });
 
         // Find updated records
-        const deleted = await model.findMany({
+        const deletedPromise = model.findMany({
           where: {
             deletedAt: {
               gte: lastCheckTime,
             },
           },
         });
+
+        const [created, updated, deleted] = await Promise.all([createdPromise, updatedPromise, deletedPromise])
 
         // Add changes to our collection
         created.forEach((record: any) => {
@@ -159,7 +161,7 @@ export const prismaConnector: ClientProvider<
       return table;
     }
   });
-  pollDatabaseChanges(client, prismaTables, 5, (payload: PrismaPayload) => {
+  pollDatabaseChanges(client, prismaTables, 5, (payload) => {
     set(
       produce((state) => {
         for (const name of tablesMap.get(payload.table) ?? []) {

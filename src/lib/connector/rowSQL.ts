@@ -1,13 +1,13 @@
 import { produce } from "solid-js/store";
 
-import { ClientProvider, PostgrestPayload } from "../../types";
-import { addElement, deleteElement, editElement } from "../../utils/utils";
+import type { ClientProvider, PostgrestPayload } from "../../types";
+import { filters, PayloadSettings, setItems, tablesMap } from "../../utils/utils";
 
 async function pollFromPostgrest(
   baseUrl: string,
   tables: string[] = ["countries"],
   intervalSeconds: number = 5,
-  callback: (payload: PostgrestPayload) => void = () => {}
+  callback: (payload: PostgrestPayload) => void = () => { }
 ) {
   // Keep track of the last check time
   let lastCheckTime = new Date();
@@ -22,17 +22,19 @@ async function pollFromPostgrest(
         const model = (route: string) =>
           fetch(`${baseUrl}/${route}`).then((s) => s.json() as Promise<any[]>);
 
-        const created = await model(
+        const createdPromise = await model(
           `${table}?created_at=gte.${timestampDate}&deleted_at=is.null`
         );
 
-        const updated = await model(
+        const updatedPromise = await model(
           `${table}?created_at=lt.${timestampDate}&updated_at=gte.${timestampDate}&deleted_at=is.null`
         );
 
-        const deleted = await model(
+        const deletedPromise = await model(
           `${table}?&deleted_at=gte.${timestampDate}`
         );
+
+        const [created, updated, deleted] = await Promise.all([createdPromise, updatedPromise, deletedPromise])
 
         // Add changes to our collection
         created.forEach((record: any) => {
@@ -86,8 +88,6 @@ export const postgrestConnector: ClientProvider<string, () => any> = (
   tables,
   set
 ) => {
-  const tablesMap = new Map<string, string[]>();
-  const filters: Record<string, ((item: any) => boolean) | undefined> = {};
 
   set(
     produce(async (state) => {
@@ -125,36 +125,16 @@ export const postgrestConnector: ClientProvider<string, () => any> = (
     }
   });
   pollFromPostgrest(client, postgrestTables, 5, (payload: PostgrestPayload) => {
-    set(
-      produce((state) => {
-        for (const name of tablesMap.get(payload.table) ?? []) {
-          const filter = filters[name] ?? (() => true);
-          if (payload.type === "INSERT") {
-            if (filter(payload.record)) {
-              addElement(state[name], payload.record);
-            }
-          } else if (payload.type === "UPDATE") {
-            const idx = state[name].findIndex(
-              (s) => s.id === payload.record.id
-            );
-            if (idx !== -1) {
-              if (filter(payload.record)) {
-                editElement(state[name], idx, payload.record);
-              } else {
-                deleteElement(state[name], idx);
-              }
-            } else if (filter(payload.record)) {
-              addElement(state[name], payload.record);
-            }
-          } else {
-            const idx = state[name].findIndex(
-              (s) => s.id === payload.record.id
-            );
-            if (idx === -1) return;
-            deleteElement(state[name], idx);
-          }
-        }
-      })
-    );
-  });
+    //wip
+    const settings: PayloadSettings<typeof payload> = {
+      getNewId: (item) => item.new?.id,
+      getTable: (item) => item.table,
+      getType: (item) => item.type,
+      getNewItem: (item) => item.record,
+      getOldId: (item) => item.old?.id,
+      checkInsert: 'INSERT',
+      checkUpdate: 'UPDATE',
+    }
+    setItems(set, settings, payload)
+  })
 };
