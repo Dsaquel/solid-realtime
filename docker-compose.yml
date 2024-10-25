@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:16
+    user: postgres
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: user
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - 127.0.0.1:5432:5432
+    healthcheck:
+      test: ["CMD", "pg_isready"]
+      start_period: 60s
+      interval: 6s
+      timeout: 6s
+      retries: 10
+
+  server:
+    image: postgrest/postgrest
+    ports:
+      - "3000:3000"
+    environment:
+      PGRST_DB_URI: postgres://authenticator:mysecretpassword@db:5432/postgres
+      PGRST_DB_ANON_ROLE: "web_anon"
+    depends_on:
+      - db
+
+volumes:
+  db-data:
+

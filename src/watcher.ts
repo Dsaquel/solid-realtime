@@ -8,6 +8,7 @@ import {
   Query,
   DocumentData,
 } from "@firebase/firestore";
+import { PrismaClient } from "@prisma/client";
 
 type QueryType<X> =
   | string
@@ -26,6 +27,20 @@ type ClientProvider<T, X> = (
   set: SetStoreFunction<Record<string, any[]>>
 ) => void;
 
+interface PrismaPayload {
+  type: "INSERT" | "UPDATE" | "DELETE";
+  table: string;
+  record: any;
+  timestamp: Date;
+}
+
+interface PostgrestPayload {
+  type: "INSERT" | "UPDATE" | "DELETE";
+  table: string;
+  record: any;
+  timestamp: Date;
+}
+
 function addElement(collection: any[], elem: any) {
   collection.push(elem);
 }
@@ -38,11 +53,10 @@ function deleteElement(collection: any[], index: number) {
   collection.splice(index, 1);
 }
 
-export const supaConnector: ClientProvider<SupabaseClient, () => any[]> = (
-  client,
-  tables,
-  set
-) => {
+export const supaConnector: ClientProvider<
+  SupabaseClient,
+  () => Promise<any>[]
+> = (client, tables, set) => {
   const tablesMap = new Map<string, string[]>();
   const filters: Record<string, ((item: any) => boolean) | undefined> = {};
 
@@ -61,8 +75,7 @@ export const supaConnector: ClientProvider<SupabaseClient, () => any[]> = (
           query = async () => (await client.from(table).select()).data!;
         }
 
-        tablesMap.get(table)?.push(name) ||
-          tablesMap.set(table, [name]);
+        tablesMap.get(table)?.push(name) || tablesMap.set(table, [name]);
         state[name] = (await query?.()) ?? [];
       }
     })
@@ -136,24 +149,24 @@ export const firestoreConnector: ClientProvider<
 
     onSnapshot(q, (snap) => {
       snap.docChanges().forEach((change) => {
-        const data = change.doc
+        const data = change.doc;
         const id = change.doc.id;
         set(
           produce((state) => {
             if (change.type === "added") {
               if (filter(change.doc.data())) {
-                addElement(state[name], data)
+                addElement(state[name], data);
               }
             } else if (change.type === "modified") {
               const idx = state[name].findIndex((s) => s.id === id);
               if (idx !== -1) {
                 if (filter(data)) {
-                  editElement(state[name], idx, data)
+                  editElement(state[name], idx, data);
                 } else {
                   deleteElement(state[name], idx);
                 }
               } else if (filter(data)) {
-                addElement(state[name], data)
+                addElement(state[name], data);
               }
             } else {
               const idx = state[name].findIndex((s) => s.id === id);
@@ -165,6 +178,346 @@ export const firestoreConnector: ClientProvider<
       });
     });
   }
+};
+
+async function softDelete(
+  prisma: PrismaClient,
+  id: number,
+  table: keyof PrismaClient
+) {
+  return (prisma[table] as any).update({
+    where: { id },
+    data: { deletedAt: new Date() },
+  });
+}
+
+async function pollDatabaseChanges(
+  client: PrismaClient,
+  tables: string[] = ["Country"],
+  intervalSeconds: number = 5,
+  callback: (payload: PrismaPayload) => void = () => {}
+) {
+
+  // Keep track of the last check time
+  let lastCheckTime = new Date();
+  console.log("Starting database polling...");
+  console.log("Initial checkpoint:", lastCheckTime);
+
+  while (true) {
+    try {
+      const changes: PrismaPayload[] = [];
+      const currentCheckTime = new Date();
+      console.log("new checkpoint:", currentCheckTime);
+
+      // Check each table for changes
+      for (const table of tables) {
+        // Type assertion for dynamic table access
+        const model = client[table.toLowerCase() as keyof PrismaClient] as any;
+
+        // Find created records
+        const created = await model.findMany({
+          where: {
+            deletedAt: null,
+            createdAt: {
+              gte: lastCheckTime,
+            },
+          },
+        });
+
+        // Find updated records
+        const updated = await model.findMany({
+          where: {
+            deletedAt: null,
+            updatedAt: {
+              gte: lastCheckTime,
+            },
+            createdAt: {
+              lt: lastCheckTime,
+            },
+          },
+        });
+
+        // Find updated records
+        const deleted = await model.findMany({
+          where: {
+            deletedAt: {
+              gte: lastCheckTime,
+            },
+          },
+        });
+
+        // Add changes to our collection
+        created.forEach((record: any) => {
+          changes.push({
+            type: "INSERT",
+            table,
+            record,
+            timestamp: record.createdAt,
+          });
+        });
+
+        updated.forEach((record: any) => {
+          changes.push({
+            type: "UPDATE",
+            table,
+            record,
+            timestamp: record.updatedAt,
+          });
+        });
+
+        deleted.forEach((record: any) => {
+          changes.push({
+            type: "DELETE",
+            table,
+            record,
+            timestamp: record.deletedAt,
+          });
+        });
+      }
+
+      // If there are any changes, process them
+      if (changes.length > 0) {
+        console.log("\nDetected changes:", new Date());
+        changes.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+        for (const change of changes) {
+          callback(change);
+        }
+      }
+
+      // Update the checkpoint
+      lastCheckTime = currentCheckTime;
+
+      // Wait for the specified interval
+      await new Promise((resolve) =>
+        setTimeout(resolve, intervalSeconds * 1000)
+      );
+    } catch (error) {
+      console.error("Error while polling:", error);
+      // Wait a bit before retrying after an error
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
+}
+
+async function pollFromPostgrest(
+  baseUrl: string,
+  tables: string[] = ["countries"],
+  intervalSeconds: number = 5,
+  callback: (payload: PostgrestPayload) => void = () => {}
+) {
+  // Keep track of the last check time
+  let lastCheckTime = new Date();
+
+  while (true) {
+    try {
+      const changes: PostgrestPayload[] = [];
+      const currentCheckTime = new Date();
+      const timestampDate = lastCheckTime.toISOString()
+
+      for (const table of tables) {
+        const model = (route: string) => fetch(`${baseUrl}/${route}`).then((s) => s.json() as Promise<any[]>);
+
+        const created = await model(
+          `${table}?created_at=gte.${timestampDate}&deleted_at=is.null`
+        );
+
+        const updated = await model(
+          `${table}?created_at=lt.${timestampDate}&updated_at=gte.${timestampDate}&deleted_at=is.null`
+        );
+
+        const deleted = await model(
+          `${table}?&deleted_at=gte.${timestampDate}`
+        );
+
+        // Add changes to our collection
+        created.forEach((record: any) => {
+          changes.push({
+            type: "INSERT",
+            table,
+            record,
+            timestamp: record.createdAt,
+          });
+        });
+
+        updated.forEach((record: any) => {
+          changes.push({
+            type: "UPDATE",
+            table,
+            record,
+            timestamp: record.updatedAt,
+          });
+        });
+
+        deleted.forEach((record: any) => {
+          changes.push({
+            type: "DELETE",
+            table,
+            record,
+            timestamp: record.deletedAt,
+          });
+        });
+      }
+
+      // If there are any changes, process them
+      if (changes.length > 0) {
+        changes.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+        for (const change of changes) {
+          callback(change);
+        }
+      }
+
+      // Update the checkpoint
+      lastCheckTime = currentCheckTime;
+    } catch (error) {
+      console.error("Error while polling:", error);
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalSeconds * 1000));
+  }
+}
+
+export const prismaConnector: ClientProvider<
+  PrismaClient,
+  () => Promise<any[]>
+> = (client, tables, set) => {
+  const tablesMap = new Map<string, string[]>();
+  const filters: Record<string, ((item: any) => boolean) | undefined> = {};
+
+  set(
+    produce(async (state) => {
+      for (const tableSelector of tables) {
+        let name, query, table: string;
+        if (typeof tableSelector !== "string") {
+          name = tableSelector.name;
+          table = tableSelector.table;
+          query = tableSelector.query;
+          filters[name] = tableSelector.filter;
+        } else {
+          name = tableSelector;
+          table = tableSelector;
+          query = async () =>
+            await (client[table as keyof typeof client] as any).findMany({});
+        }
+
+        tablesMap.get(table)?.push(name) || tablesMap.set(table, [name]);
+        state[name] = ((await query?.()) ?? []).filter(filters[name]);
+      }
+    })
+  );
+
+  const prismaTables = tables.map((table) => {
+    if (typeof table !== "string") {
+      return table.table;
+    } else {
+      return table;
+    }
+  });
+  pollDatabaseChanges(client, prismaTables, 5, (payload: PrismaPayload) => {
+    set(
+      produce((state) => {
+        for (const name of tablesMap.get(payload.table) ?? []) {
+          const filter = filters[name] ?? (() => true);
+          if (payload.type === "INSERT") {
+            if (filter(payload.record)) {
+              addElement(state[name], payload.record);
+            }
+          } else if (payload.type === "UPDATE") {
+            const idx = state[name].findIndex(
+              (s) => s.id === payload.record.id
+            );
+            if (idx !== -1) {
+              if (filter(payload.record)) {
+                editElement(state[name], idx, payload.record);
+              } else {
+                deleteElement(state[name], idx);
+              }
+            } else if (filter(payload.record)) {
+              addElement(state[name], payload.record);
+            }
+          } else {
+            const idx = state[name].findIndex(
+              (s) => s.id === payload.record.id
+            );
+            if (idx === -1) return;
+            deleteElement(state[name], idx);
+          }
+        }
+      })
+    );
+  });
+};
+
+export const postgrestConnector: ClientProvider<string, () => any> = (
+  client,
+  tables,
+  set
+) => {
+  const tablesMap = new Map<string, string[]>();
+  const filters: Record<string, ((item: any) => boolean) | undefined> = {};
+
+  set(
+    produce(async (state) => {
+      for (const tableSelector of tables) {
+        let name, query, table: string;
+        if (typeof tableSelector !== "string") {
+          name = tableSelector.name;
+          table = tableSelector.table;
+          query = tableSelector.query ?? (async () => await fetch(`${client}/${table}`).then((s => s.json())));
+          filters[name] = tableSelector.filter;
+        } else {
+          name = tableSelector;
+          table = tableSelector;
+          filters[name] = (() => true)
+          query = async () => await fetch(`${client}/${table}`).then((s => s.json()));
+        }
+
+        tablesMap.get(table)?.push(name) || tablesMap.set(table, [name]);
+        state[name] = ((await query?.()) ?? []).filter((item: any) => !item.deleted_at).filter(filters[name]);
+      }
+    })
+  );
+
+  const postgrestTables = tables.map((table) => {
+    if (typeof table !== "string") {
+      return table.table;
+    } else {
+      return table;
+    }
+  });
+  pollFromPostgrest(client, postgrestTables, 5, (payload: PostgrestPayload) => {
+    set(
+      produce((state) => {
+        for (const name of tablesMap.get(payload.table) ?? []) {
+          const filter = filters[name] ?? (() => true);
+          if (payload.type === "INSERT") {
+            if (filter(payload.record)) {
+              addElement(state[name], payload.record);
+            }
+          } else if (payload.type === "UPDATE") {
+            const idx = state[name].findIndex(
+              (s) => s.id === payload.record.id
+            );
+            if (idx !== -1) {
+              if (filter(payload.record)) {
+                editElement(state[name], idx, payload.record);
+              } else {
+                deleteElement(state[name], idx);
+              }
+            } else if (filter(payload.record)) {
+              addElement(state[name], payload.record);
+            }
+          } else {
+            const idx = state[name].findIndex(
+              (s) => s.id === payload.record.id
+            );
+            if (idx === -1) return;
+            deleteElement(state[name], idx);
+          }
+        }
+      })
+    );
+  });
 };
 
 export function useWatcher<T, X>(
