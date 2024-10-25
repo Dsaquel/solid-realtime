@@ -197,6 +197,7 @@ async function pollDatabaseChanges(
   intervalSeconds: number = 5,
   callback: (payload: PrismaPayload) => void = () => {}
 ) {
+
   // Keep track of the last check time
   let lastCheckTime = new Date();
   console.log("Starting database polling...");
@@ -307,20 +308,16 @@ async function pollFromPostgrest(
 ) {
   // Keep track of the last check time
   let lastCheckTime = new Date();
-  console.log("Starting database polling...");
-  console.log("Initial checkpoint:", lastCheckTime);
 
   while (true) {
     try {
       const changes: PostgrestPayload[] = [];
       const currentCheckTime = new Date();
-      const timestampDate = currentCheckTime.toISOString();
+      const timestampDate = lastCheckTime.toISOString()
 
       for (const table of tables) {
-        const model = (route: string) =>
-          fetch(`${baseUrl}/${route}`).then((s) => s.json()) as any;
+        const model = (route: string) => fetch(`${baseUrl}/${route}`).then((s) => s.json() as Promise<any[]>);
 
-        // maybe need to change date
         const created = await model(
           `${table}?created_at=gte.${timestampDate}&deleted_at=is.null`
         );
@@ -364,7 +361,6 @@ async function pollFromPostgrest(
 
       // If there are any changes, process them
       if (changes.length > 0) {
-        console.log("\nDetected changes:", new Date());
         changes.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
         for (const change of changes) {
@@ -405,7 +401,7 @@ export const prismaConnector: ClientProvider<
         }
 
         tablesMap.get(table)?.push(name) || tablesMap.set(table, [name]);
-        state[name] = (await query?.()) ?? [];
+        state[name] = ((await query?.()) ?? []).filter(filters[name]);
       }
     })
   );
@@ -467,17 +463,17 @@ export const postgrestConnector: ClientProvider<string, () => any> = (
         if (typeof tableSelector !== "string") {
           name = tableSelector.name;
           table = tableSelector.table;
-          query = tableSelector.query;
+          query = tableSelector.query ?? (async () => await fetch(`${client}/${table}`).then((s => s.json())));
           filters[name] = tableSelector.filter;
         } else {
           name = tableSelector;
           table = tableSelector;
-          query = async () =>
-            await fetch(`${client}/${table}`).then((s) => s.json());
+          filters[name] = (() => true)
+          query = async () => await fetch(`${client}/${table}`).then((s => s.json()));
         }
 
         tablesMap.get(table)?.push(name) || tablesMap.set(table, [name]);
-        state[name] = (await query?.()) ?? [];
+        state[name] = ((await query?.()) ?? []).filter((item: any) => !item.deleted_at).filter(filters[name]);
       }
     })
   );
