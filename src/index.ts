@@ -1,1 +1,1 @@
-export { useWatcher, supaConnector, firestoreConnector } from "./watcher";
+export { useWatcher, supaConnector, firestoreConnector, prismaConnector, getDatabaseChanges, prismaData, createSSE } from "./watcher";

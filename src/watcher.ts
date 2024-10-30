@@ -9,6 +9,23 @@ import {
   DocumentData,
 } from "@firebase/firestore";
 import { PrismaClient } from "@prisma/client";
+import { createEffect, createSignal, onCleanup, onMount } from "solid-js";
+import { EventEmitter } from 'events';
+
+export class Store extends EventEmitter {
+  private _value: number = 0;
+
+  get value() {
+      return this._value;
+  }
+
+  set value(newValue: number) {
+      this._value = newValue;
+      this.emit('change', newValue);
+  }
+}
+export const globalStore = new Store();
+
 
 type QueryType<X> =
   | string
@@ -27,9 +44,18 @@ type ClientProvider<T, X> = (
   set: SetStoreFunction<Record<string, any[]>>
 ) => void;
 
-const prisma = new PrismaClient();
-
 interface PrismaPayload {
+  type: "INSERT" | "UPDATE" | "DELETE";
+  table: string;
+  record: any;
+  timestamp: Date;
+}
+
+// type PrismaClientProvider = {
+//   client: PrismaClient,
+// }
+
+interface PostgrestPayload {
   type: "INSERT" | "UPDATE" | "DELETE";
   table: string;
   record: any;
@@ -48,11 +74,10 @@ function deleteElement(collection: any[], index: number) {
   collection.splice(index, 1);
 }
 
-export const supaConnector: ClientProvider<SupabaseClient, () => Promise<any>[]> = (
-  client,
-  tables,
-  set
-) => {
+export const supaConnector: ClientProvider<
+  SupabaseClient,
+  () => Promise<any>[]
+> = (client, tables, set) => {
   const tablesMap = new Map<string, string[]>();
   const filters: Record<string, ((item: any) => boolean) | undefined> = {};
 
@@ -71,8 +96,7 @@ export const supaConnector: ClientProvider<SupabaseClient, () => Promise<any>[]>
           query = async () => (await client.from(table).select()).data!;
         }
 
-        tablesMap.get(table)?.push(name) ||
-          tablesMap.set(table, [name]);
+        tablesMap.get(table)?.push(name) || tablesMap.set(table, [name]);
         state[name] = (await query?.()) ?? [];
       }
     })
@@ -146,24 +170,24 @@ export const firestoreConnector: ClientProvider<
 
     onSnapshot(q, (snap) => {
       snap.docChanges().forEach((change) => {
-        const data = change.doc
+        const data = change.doc;
         const id = change.doc.id;
         set(
           produce((state) => {
             if (change.type === "added") {
               if (filter(change.doc.data())) {
-                addElement(state[name], data)
+                addElement(state[name], data);
               }
             } else if (change.type === "modified") {
               const idx = state[name].findIndex((s) => s.id === id);
               if (idx !== -1) {
                 if (filter(data)) {
-                  editElement(state[name], idx, data)
+                  editElement(state[name], idx, data);
                 } else {
                   deleteElement(state[name], idx);
                 }
               } else if (filter(data)) {
-                addElement(state[name], data)
+                addElement(state[name], data);
               }
             } else {
               const idx = state[name].findIndex((s) => s.id === id);
@@ -177,14 +201,104 @@ export const firestoreConnector: ClientProvider<
   }
 };
 
-async function softDelete(id: number, table: keyof typeof prisma) {
+async function softDelete(
+  prisma: PrismaClient,
+  id: number,
+  table: keyof PrismaClient
+) {
   return (prisma[table] as any).update({
     where: { id },
     data: { deletedAt: new Date() },
   });
 }
 
-async function pollDatabaseChanges(
+export async function getDatabaseChanges(
+  client: PrismaClient,
+  tables: string[] = ["Country"],
+  lastCheckTime: Date,
+  callback: (payload: PrismaPayload) => void = () => {}
+) {
+  const changes: PrismaPayload[] = [];
+  // Check each table for changes
+  for (const table of tables) {
+    // Type assertion for dynamic table access
+    const model = client[table.toLowerCase() as keyof PrismaClient] as any;
+
+    // Find created records
+    const created = await model.findMany({
+      where: {
+        deletedAt: null,
+        createdAt: {
+          gte: lastCheckTime,
+        },
+      },
+    });
+
+    // Find updated records
+    const updated = await model.findMany({
+      where: {
+        deletedAt: null,
+        updatedAt: {
+          gte: lastCheckTime,
+        },
+        createdAt: {
+          lt: lastCheckTime,
+        },
+      },
+    });
+
+    // Find updated records
+    const deleted = await model.findMany({
+      where: {
+        deletedAt: {
+          gte: lastCheckTime,
+        },
+      },
+    });
+
+    // Add changes to our collection
+    created.forEach((record: any) => {
+      changes.push({
+        type: "INSERT",
+        table,
+        record,
+        timestamp: record.createdAt,
+      });
+    });
+
+    updated.forEach((record: any) => {
+      changes.push({
+        type: "UPDATE",
+        table,
+        record,
+        timestamp: record.updatedAt,
+      });
+    });
+
+    deleted.forEach((record: any) => {
+      changes.push({
+        type: "DELETE",
+        table,
+        record,
+        timestamp: record.deletedAt,
+      });
+    });
+  }
+
+  // If there are any changes, process them
+  if (changes.length > 0) {
+    console.log("\nDetected changes:", new Date());
+    changes.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+    for (const change of changes) {
+      callback(change);
+    }
+  }
+  return changes;
+}
+
+async function* pollDatabaseChanges(
+  client: PrismaClient,
   tables: string[] = ["Country"],
   intervalSeconds: number = 5,
   callback: (payload: PrismaPayload) => void = () => {}
@@ -193,51 +307,65 @@ async function pollDatabaseChanges(
   let lastCheckTime = new Date();
   console.log("Starting database polling...");
   console.log("Initial checkpoint:", lastCheckTime);
+  while (true) {
+    try {
+      const currentCheckTime = new Date();
+      console.log("new checkpoint:", currentCheckTime);
+
+      const changes = await getDatabaseChanges(
+        client,
+        tables,
+        lastCheckTime,
+        callback
+      );
+      yield changes;
+      // Update the checkpoint
+      lastCheckTime = currentCheckTime;
+      // Wait for the specified interval
+      await new Promise((resolve) =>
+        setTimeout(resolve, intervalSeconds * 1000)
+      );
+    } catch (error) {
+      console.error("Error while polling:", error);
+      // Wait a bit before retrying after an error
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
+}
+
+async function pollFromPostgrest(
+  baseUrl: string,
+  tables: string[] = ["countries"],
+  intervalSeconds: number = 5,
+  callback: (payload: PostgrestPayload) => void = () => {}
+) {
+  // Keep track of the last check time
+  let lastCheckTime = new Date();
+  console.log("Starting database polling...");
+  console.log("Initial checkpoint:", lastCheckTime);
 
   while (true) {
     try {
-      const changes: PrismaPayload[] = [];
+      const changes: PostgrestPayload[] = [];
       const currentCheckTime = new Date();
+      const timestampDate = currentCheckTime.toISOString();
 
-      // Check each table for changes
       for (const table of tables) {
-        // Type assertion for dynamic table access
-        const model = prisma[table.toLowerCase() as keyof typeof prisma] as any;
+        const model = (route: string) =>
+          fetch(`${baseUrl}/${route}`).then((s) => s.json()) as any;
 
-        // Find created records
-        const created = await model.findMany({
-          where: {
-            deletedAt: null,
-            createdAt: {
-              gte: lastCheckTime,
-              lt: currentCheckTime,
-            },
-          },
-        });
+        // maybe need to change date
+        const created = await model(
+          `${table}?created_at=gte.${timestampDate}&deleted_at=is.null`
+        );
 
-        // Find updated records
-        const updated = await model.findMany({
-          where: {
-            deletedAt: null,
-            updatedAt: {
-              gte: lastCheckTime,
-              lt: currentCheckTime,
-            },
-            createdAt: {
-              lt: lastCheckTime,
-            },
-          },
-        });
+        const updated = await model(
+          `${table}?created_at=lt.${timestampDate}&updated_at=gte.${timestampDate}&deleted_at=is.null`
+        );
 
-        // Find updated records
-        const deleted = await model.findMany({
-          where: {
-            deletedAt: {
-              gte: lastCheckTime,
-              lt: currentCheckTime,
-            },
-          },
-        });
+        const deleted = await model(
+          `${table}?&deleted_at=gte.${timestampDate}`
+        );
 
         // Add changes to our collection
         created.forEach((record: any) => {
@@ -280,26 +408,70 @@ async function pollDatabaseChanges(
 
       // Update the checkpoint
       lastCheckTime = currentCheckTime;
-
-      // Wait for the specified interval
-      await new Promise((resolve) =>
-        setTimeout(resolve, intervalSeconds * 1000)
-      );
     } catch (error) {
       console.error("Error while polling:", error);
-      // Wait a bit before retrying after an error
-      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
+    await new Promise((resolve) => setTimeout(resolve, intervalSeconds * 1000));
   }
 }
+
+// Create a global event bus for client notifications
+
+export const createChangeEmitter = () => {
+  const listeners = new Set<(table: string, data: any[]) => void>();
+
+  return {
+    emit: (table: string, data: any[]) => {
+      // console.log(`[ChangeEmitter] Emitting update for table "${table}"`, {
+      //   dataLength: data.length,
+      //   firstItem: data[0],
+      //   lastItem: data[data.length - 1]
+      // });
+      listeners.forEach((listener) => listener(table, data));
+    },
+    subscribe: (callback: (table: string, data: any[]) => void) => {
+      // console.log('[ChangeEmitter] New subscriber added');
+      listeners.add(callback);
+      // console.log('[ChangeEmitter] Current subscriber count:', listeners.size);
+      return () => {
+        // console.log('[ChangeEmitter] Subscriber removed');
+        listeners.delete(callback);
+        // console.log('[ChangeEmitter] Remaining subscribers:', listeners.size);
+      };
+    },
+  };
+};
+
+export const createReadyEmitter = () => {
+  const listeners = new Set<(isReady: boolean) => void>();
+  return {
+    emit: (isReady: boolean) => {
+      listeners.forEach((listener) => listener(isReady));
+    },
+    subscribe: (callback: (isReady: boolean) => void) => {
+      listeners.add(callback);
+      return () => {
+        listeners.delete(callback);
+      };
+    },
+  };
+};
+
+export const readyEmitter = createReadyEmitter();
+export const changeEmitter = createChangeEmitter();
+
+
+
+export const [prismaData, setPrismaData] = createSignal<PrismaPayload[]>([])
+let dbChanges: AsyncGenerator<PrismaPayload[], void, unknown>;
 
 export const prismaConnector: ClientProvider<
   PrismaClient,
   () => Promise<any[]>
-> = (client, tables, set) => {
+> = async (client, tables, set) => {
+  // console.log('[PrismaConnector] Initializing with tables:', tables);
   const tablesMap = new Map<string, string[]>();
   const filters: Record<string, ((item: any) => boolean) | undefined> = {};
-
   set(
     produce(async (state) => {
       for (const tableSelector of tables) {
@@ -316,8 +488,19 @@ export const prismaConnector: ClientProvider<
             await (client[table as keyof typeof client] as any).findMany({});
         }
 
+        // console.log(`[PrismaConnector] Setting up table "${name}"`);
+        const queryResult = (await query?.()) ?? [];
+        // console.log(`[PrismaConnector] Initial query for "${name}"`, {
+        //   resultLength: queryResult.length,
+        //   firstItem: queryResult[0],
+        //   lastItem: queryResult[queryResult.length - 1]
+        // });
         tablesMap.get(table)?.push(name) || tablesMap.set(table, [name]);
-        state[name] = (await query?.()) ?? [];
+        state[name] = queryResult;
+
+        // Notify clients about initial data
+        // console.log(`[PrismaConnector] Emitting initial data for "${name}"`);
+        changeEmitter.emit(name, state[name]);
       }
     })
   );
@@ -329,7 +512,105 @@ export const prismaConnector: ClientProvider<
       return table;
     }
   });
-  pollDatabaseChanges(prismaTables, 5, (payload: PrismaPayload) => {
+
+  // console.log('[PrismaConnector] Starting database polling for tables:', prismaTables);
+  dbChanges = pollDatabaseChanges(
+    client,
+    prismaTables,
+    5,
+    (payload: PrismaPayload) => {
+      set(
+        produce((state) => {
+          for (const name of tablesMap.get(payload.table) ?? []) {
+            const filter = filters[name] ?? (() => true);
+            if (payload.type === "INSERT") {
+              if (filter(payload.record)) {
+                addElement(state[name], payload.record);
+                // Notify clients about the update
+                changeEmitter.emit(name, state[name]);
+              }
+            } else if (payload.type === "UPDATE") {
+              const idx = state[name].findIndex(
+                (s) => s.id === payload.record.id
+              );
+              if (idx !== -1) {
+                if (filter(payload.record)) {
+                  editElement(state[name], idx, payload.record);
+                } else {
+                  deleteElement(state[name], idx);
+                }
+                // Notify clients about the update
+                changeEmitter.emit(name, state[name]);
+              } else if (filter(payload.record)) {
+                addElement(state[name], payload.record);
+                // Notify clients about the update
+                changeEmitter.emit(name, state[name]);
+              }
+            } else {
+              const idx = state[name].findIndex(
+                (s) => s.id === payload.record.id
+              );
+              if (idx === -1) return;
+              deleteElement(state[name], idx);
+              // Notify clients about the update
+              changeEmitter.emit(name, state[name]);
+            }
+          }
+          changeEmitter.emit("ready", []);
+        })
+      );
+    }
+  );
+
+  for await (const changes of dbChanges) {
+    // console.log("CHANGE IN DB: ", changes);
+    setPrismaData(changes)
+  }
+};
+
+// Hook for client components to subscribe to changes
+export function useTableUpdates<T>(tableName: string) {
+  
+}
+
+export const postgrestConnector: ClientProvider<string, () => any> = (
+  client,
+  tables,
+  set
+) => {
+  const tablesMap = new Map<string, string[]>();
+  const filters: Record<string, ((item: any) => boolean) | undefined> = {};
+
+  set(
+    produce(async (state) => {
+      for (const tableSelector of tables) {
+        let name, query, table: string;
+        if (typeof tableSelector !== "string") {
+          name = tableSelector.name;
+          table = tableSelector.table;
+          query = tableSelector.query;
+          filters[name] = tableSelector.filter;
+        } else {
+          name = tableSelector;
+          table = tableSelector;
+          query = async () =>
+            await fetch(`${client}/${table}`).then((s) => s.json());
+        }
+
+        tablesMap.get(table)?.push(name) || tablesMap.set(table, [name]);
+        state[name] = (await query?.()) ?? [];
+      }
+    })
+  );
+
+  const postgrestTables = tables.map((table) => {
+    if (typeof table !== "string") {
+      return table.table;
+    } else {
+      return table;
+    }
+  });
+  pollFromPostgrest(client, postgrestTables, 5, (payload: PostgrestPayload) => {
     set(
       produce((state) => {
         for (const name of tablesMap.get(payload.table) ?? []) {
@@ -364,6 +645,40 @@ export const prismaConnector: ClientProvider<
   });
 };
 
+export function createSSE(request: any, onSendUpdate: any) {
+  const { writable, readable } = new TransformStream();
+  const writer = writable.getWriter();
+
+  request.headers.set('Content-Type', 'text/event-stream');
+  request.headers.set('Cache-Control', 'no-cache');
+  request.headers.set('Connection', 'keep-alive');
+
+  // Function to send updates
+  const sendUpdate = (data: any) => {
+    writer.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  // Start an interval or attach a listener to get data updates
+  const interval = setInterval(() => {
+    const data = onSendUpdate();
+    if (data) sendUpdate(data);
+  }, 5000);
+
+  // Cleanup on connection close
+  request.signal.addEventListener('abort', () => {
+    clearInterval(interval);
+    writer.close();
+  });
+
+  return new Response(readable, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    },
+  });
+}
+
 export function useWatcher<T, X>(
   client: T,
   tables: TableSelector<X>[],
@@ -375,5 +690,6 @@ export function useWatcher<T, X>(
 
   return {
     store,
+    setStore,
   };
 }
