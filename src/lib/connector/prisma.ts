@@ -1,19 +1,8 @@
 import { produce } from "solid-js/store";
 import { PrismaClient } from "@prisma/client";
+import { setItems } from "../../utils";
 
-import { ClientProvider, PrismaPayload } from "../../types";
-import { addElement, deleteElement, editElement } from "../../utils/utils";
-
-async function softDelete(
-  prisma: PrismaClient,
-  id: number,
-  table: keyof PrismaClient
-) {
-  return (prisma[table] as any).update({
-    where: { id },
-    data: { deletedAt: new Date() },
-  });
-}
+import type { ClientProvider, PayloadSettings, PrismaPayload } from "../../types";
 
 async function pollDatabaseChanges(
   client: PrismaClient,
@@ -162,36 +151,15 @@ export const prismaConnector: ClientProvider<
     }
   });
   pollDatabaseChanges(client, prismaTables, 5, (payload) => {
-    set(
-      produce((state) => {
-        for (const name of tablesMap.get(payload.table) ?? []) {
-          const filter = filters[name] ?? (() => true);
-          if (payload.type === "INSERT") {
-            if (filter(payload.record)) {
-              addElement(state[name], payload.record);
-            }
-          } else if (payload.type === "UPDATE") {
-            const idx = state[name].findIndex(
-              (s) => s.id === payload.record.id
-            );
-            if (idx !== -1) {
-              if (filter(payload.record)) {
-                editElement(state[name], idx, payload.record);
-              } else {
-                deleteElement(state[name], idx);
-              }
-            } else if (filter(payload.record)) {
-              addElement(state[name], payload.record);
-            }
-          } else {
-            const idx = state[name].findIndex(
-              (s) => s.id === payload.record.id
-            );
-            if (idx === -1) return;
-            deleteElement(state[name], idx);
-          }
-        }
-      })
-    );
+    const settings: PayloadSettings<typeof payload> = {
+      getNewId: (item) => item.record?.id,
+      getTable: (item) => item.table,
+      getType: (item) => item.type,
+      getNewItem: (item) => item.record,
+      getOldId: (item) => item.record?.id,
+      checkInsert: 'INSERT',
+      checkUpdate: 'UPDATE',
+    }
+    setItems(set, settings, payload)
   });
 };

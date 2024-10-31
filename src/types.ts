@@ -3,11 +3,11 @@ import { SetStoreFunction } from "solid-js/store";
 export type QueryType<X> =
   | string
   | {
-      name: string;
-      table: string;
-      query?: X;
-      filter?: (item: any) => boolean;
-    };
+    name: string;
+    table: string;
+    query?: X;
+    filter?: (item: any) => boolean;
+  };
 
 export type TableSelector<X> = string | QueryType<X>;
 
@@ -30,3 +30,14 @@ export interface PostgrestPayload {
   record: any;
   timestamp: Date;
 }
+
+export interface PayloadSettings<T extends any> {
+  getTable: (item: T) => any
+  getType: (item: T) => any
+  getNewItem: (item: T) => any
+  getOldId: (item: T) => any
+  getNewId: (item: T) => any
+  checkInsert: string
+  checkUpdate: string
+}
+

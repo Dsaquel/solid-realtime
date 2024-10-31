@@ -1,5 +1,7 @@
 import { produce, SetStoreFunction } from "solid-js/store";
 
+import type { PayloadSettings } from "./types";
+
 export const tablesMap = new Map<string, string[]>();
 export const filters: Record<string, ((item: any) => boolean) | undefined> = {};
 
@@ -15,21 +17,8 @@ function deleteElement(collection: any[], index: number) {
   collection.splice(index, 1);
 }
 
-export interface PayloadSettings<T extends any> {
-  getTable: (item: T) => any
-  getType: (item: T) => any
-  getNewItem: (item: T) => any
-  getOldId: (item: T) => any
-  getNewId: (item: T) => any
-  checkInsert: string
-  checkUpdate: string
-}
 
-
-//TODO: setItems in all connectors
 export const setItems = <T>(set: SetStoreFunction<Record<string, any[]>>, settings: PayloadSettings<T>, payload: T) => {
-  console.log('settings', settings)
-  console.log('payload', payload)
   const { getNewId, getOldId, checkInsert, checkUpdate, getNewItem, getType, getTable } = settings
   const table: string = getTable(payload)
   const newItem: any = getNewItem(payload)

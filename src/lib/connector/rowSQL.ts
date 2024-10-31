@@ -1,7 +1,7 @@
 import { produce } from "solid-js/store";
+import { filters, setItems, tablesMap } from "../../utils";
 
-import type { ClientProvider, PostgrestPayload } from "../../types";
-import { filters, PayloadSettings, setItems, tablesMap } from "../../utils/utils";
+import type { ClientProvider, PayloadSettings, PostgrestPayload } from "../../types";
 
 async function pollFromPostgrest(
   baseUrl: string,
@@ -125,7 +125,6 @@ export const postgrestConnector: ClientProvider<string, () => any> = (
     }
   });
   pollFromPostgrest(client, postgrestTables, 5, (payload: PostgrestPayload) => {
-    //wip
     const settings: PayloadSettings<typeof payload> = {
       getNewId: (item) => item.new?.id,
       getTable: (item) => item.table,

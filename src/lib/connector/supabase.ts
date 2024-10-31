@@ -1,8 +1,8 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { produce } from "solid-js/store";
-import { filters, setItems, PayloadSettings, tablesMap } from "../../utils/utils";
+import { filters, setItems, tablesMap } from "../../utils";
 
-import type { ClientProvider } from "../../types";
+import type { ClientProvider, PayloadSettings } from "../../types";
 
 export const supaConnector: ClientProvider<SupabaseClient, () => any[]> = (
   client,
