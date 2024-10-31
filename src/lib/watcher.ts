@@ -1,7 +1,7 @@
 import { createStore } from "solid-js/store";
-import { ClientProvider, TableSelector } from "../types";
-
 import { supaConnector } from "./connector/supabase";
+
+import type { ClientProvider, TableSelector } from "../types";
 
 export function useWatcher<T, X>(
   client: T,

@@ -1,5 +1,3 @@
-import { produce } from "solid-js/store";
-
 import {
   onSnapshot,
   collection,
@@ -8,9 +6,9 @@ import {
   Query,
   DocumentData,
 } from "@firebase/firestore";
+import { filters, setItems, tablesMap } from "../../utils";
 
-import { ClientProvider } from "../../types";
-import { addElement, deleteElement, editElement } from "../../utils/utils";
+import type { ClientProvider, PayloadSettings } from "../../types";
 
 export const firestoreConnector: ClientProvider<
   Firestore,
@@ -29,38 +27,26 @@ export const firestoreConnector: ClientProvider<
       q = selector.query;
       filter = selector.filter ?? (() => true);
     }
+
+    tablesMap.set(name, [name])
+    filters[name] = filter
+
     if (!q) return;
 
     set(name, []);
 
     onSnapshot(q, (snap) => {
       snap.docChanges().forEach((change) => {
-        const data = change.doc;
-        const id = change.doc.id;
-        set(
-          produce((state) => {
-            if (change.type === "added") {
-              if (filter(change.doc.data())) {
-                addElement(state[name], data);
-              }
-            } else if (change.type === "modified") {
-              const idx = state[name].findIndex((s) => s.id === id);
-              if (idx !== -1) {
-                if (filter(data)) {
-                  editElement(state[name], idx, data);
-                } else {
-                  deleteElement(state[name], idx);
-                }
-              } else if (filter(data)) {
-                addElement(state[name], data);
-              }
-            } else {
-              const idx = state[name].findIndex((s) => s.id === id);
-              if (idx === -1) return;
-              deleteElement(state[name], idx);
-            }
-          })
-        );
+        const settings: PayloadSettings<typeof change> = {
+          getNewId: (item) => item.new?.id,
+          getTable: (_) => name,
+          getType: (item) => item.type,
+          getNewItem: (item) => item.doc,
+          getOldId: (item) => item.doc.id,
+          checkInsert: 'added',
+          checkUpdate: 'modified',
+        }
+        setItems(set, settings, change)
       });
     });
   }

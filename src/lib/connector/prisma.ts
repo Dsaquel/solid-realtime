@@ -1,25 +1,14 @@
 import { produce } from "solid-js/store";
 import { PrismaClient } from "@prisma/client";
+import { setItems } from "../../utils";
 
-import { ClientProvider, PrismaPayload } from "../../types";
-import { addElement, deleteElement, editElement } from "../../utils/utils";
-
-async function softDelete(
-  prisma: PrismaClient,
-  id: number,
-  table: keyof PrismaClient
-) {
-  return (prisma[table] as any).update({
-    where: { id },
-    data: { deletedAt: new Date() },
-  });
-}
+import type { ClientProvider, PayloadSettings, PrismaPayload } from "../../types";
 
 async function pollDatabaseChanges(
   client: PrismaClient,
   tables: string[] = ["Country"],
   intervalSeconds: number = 5,
-  callback: (payload: PrismaPayload) => void = () => {}
+  callback: (payload: PrismaPayload) => void = () => { }
 ) {
   // Keep track of the last check time
   let lastCheckTime = new Date();
@@ -38,7 +27,7 @@ async function pollDatabaseChanges(
         const model = client[table.toLowerCase() as keyof PrismaClient] as any;
 
         // Find created records
-        const created = await model.findMany({
+        const createdPromise = model.findMany({
           where: {
             deletedAt: null,
             createdAt: {
@@ -48,7 +37,7 @@ async function pollDatabaseChanges(
         });
 
         // Find updated records
-        const updated = await model.findMany({
+        const updatedPromise = model.findMany({
           where: {
             deletedAt: null,
             updatedAt: {
@@ -61,13 +50,15 @@ async function pollDatabaseChanges(
         });
 
         // Find updated records
-        const deleted = await model.findMany({
+        const deletedPromise = model.findMany({
           where: {
             deletedAt: {
               gte: lastCheckTime,
             },
           },
         });
+
+        const [created, updated, deleted] = await Promise.all([createdPromise, updatedPromise, deletedPromise])
 
         // Add changes to our collection
         created.forEach((record: any) => {
@@ -159,37 +150,16 @@ export const prismaConnector: ClientProvider<
       return table;
     }
   });
-  pollDatabaseChanges(client, prismaTables, 5, (payload: PrismaPayload) => {
-    set(
-      produce((state) => {
-        for (const name of tablesMap.get(payload.table) ?? []) {
-          const filter = filters[name] ?? (() => true);
-          if (payload.type === "INSERT") {
-            if (filter(payload.record)) {
-              addElement(state[name], payload.record);
-            }
-          } else if (payload.type === "UPDATE") {
-            const idx = state[name].findIndex(
-              (s) => s.id === payload.record.id
-            );
-            if (idx !== -1) {
-              if (filter(payload.record)) {
-                editElement(state[name], idx, payload.record);
-              } else {
-                deleteElement(state[name], idx);
-              }
-            } else if (filter(payload.record)) {
-              addElement(state[name], payload.record);
-            }
-          } else {
-            const idx = state[name].findIndex(
-              (s) => s.id === payload.record.id
-            );
-            if (idx === -1) return;
-            deleteElement(state[name], idx);
-          }
-        }
-      })
-    );
+  pollDatabaseChanges(client, prismaTables, 5, (payload) => {
+    const settings: PayloadSettings<typeof payload> = {
+      getNewId: (item) => item.record?.id,
+      getTable: (item) => item.table,
+      getType: (item) => item.type,
+      getNewItem: (item) => item.record,
+      getOldId: (item) => item.record?.id,
+      checkInsert: 'INSERT',
+      checkUpdate: 'UPDATE',
+    }
+    setItems(set, settings, payload)
   });
 };

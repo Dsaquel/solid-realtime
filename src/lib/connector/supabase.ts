@@ -1,17 +1,14 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { produce } from "solid-js/store";
+import { filters, setItems, tablesMap } from "../../utils";
 
-import { ClientProvider } from "../../types";
-import { addElement, deleteElement, editElement } from "../../utils/utils";
+import type { ClientProvider, PayloadSettings } from "../../types";
 
 export const supaConnector: ClientProvider<SupabaseClient, () => any[]> = (
   client,
   tables,
   set
 ) => {
-  const tablesMap = new Map<string, string[]>();
-  const filters: Record<string, ((item: any) => boolean) | undefined> = {};
-
   set(
     produce(async (state) => {
       for (const tableSelector of tables) {
@@ -42,38 +39,18 @@ export const supaConnector: ClientProvider<SupabaseClient, () => any[]> = (
         schema: "public",
       },
       (payload) => {
-        set(
-          produce((state) => {
-            for (const name of tablesMap.get(payload.table) ?? []) {
-              const filter = filters[name] ?? (() => true);
-              if (payload.eventType === "INSERT") {
-                if (filter(payload.new)) {
-                  addElement(state[name], payload.new);
-                }
-              } else if (payload.eventType === "UPDATE") {
-                const idx = state[name].findIndex(
-                  (s) => s.id === payload.new.id
-                );
-                if (idx !== -1) {
-                  if (filter(payload.new)) {
-                    editElement(state[name], idx, payload.new);
-                  } else {
-                    deleteElement(state[name], idx);
-                  }
-                } else if (filter(payload.new)) {
-                  addElement(state[name], payload.new);
-                }
-              } else {
-                const idx = state[name].findIndex(
-                  (s) => s.id === payload.old.id
-                );
-                if (idx === -1) return;
-                deleteElement(state[name], idx);
-              }
-            }
-          })
-        );
+        const settings: PayloadSettings<typeof payload> = {
+          getNewId: (item) => item.new?.id,
+          getTable: (item) => item.table,
+          getType: (item) => item.eventType,
+          getNewItem: (item) => item.new,
+          getOldId: (item) => item.old?.id,
+          checkInsert: 'INSERT',
+          checkUpdate: 'UPDATE',
+        }
+        setItems(set, settings, payload)
       }
     )
     .subscribe();
 };
+
