@@ -4,5 +4,8 @@ export {
   firestoreConnector,
   prismaConnector,
   prismaInitSSE,
-  softDelete
+  softDelete,
+  QueryType
 } from "./watcher";
+
+

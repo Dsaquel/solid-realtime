@@ -15,9 +15,9 @@ import {
 } from "@firebase/firestore";
 import { PrismaClient } from "@prisma/client";
 import { createSignal, onCleanup, onMount } from "solid-js";
-import { Action } from "@solidjs/router";
+import { action, Action } from "@solidjs/router";
 
-type QueryType<X> =
+export type QueryType<X> =
   | string
   | {
       name: string;
@@ -197,6 +197,10 @@ export async function softDelete(
     data: { deletedAt: new Date() },
   });
 }
+const echo = action(async (message: string) => {
+  await new Promise((resolve, reject) => setTimeout(resolve, 1000));
+  return message;
+});
 
 export async function getDatabaseChanges(
   client: PrismaClient,
@@ -425,7 +429,7 @@ const pollDatabaseInit = async (
   return state;
 };
 
-type SolidStartRoute = string;
+type SolidStartClient = PrismaClient;
 
 const computeFilters = (tables: QueryType<() => Promise<any[]>>[]) => {
   const tablesMap = new Map<string, string[]>();
@@ -455,10 +459,16 @@ const computeFilters = (tables: QueryType<() => Promise<any[]>>[]) => {
 };
 
 export const prismaConnector: ClientProvider<
-  SolidStartRoute,
+  SolidStartClient,
   () => Promise<any[]>
-> = async (url, tables, set) => {
-  const eventSource = new EventSource(url);
+> = async (client, tables, set) => {
+  const eventSourceParams = new URLSearchParams({
+    prisma: JSON.stringify(client),
+    tables: JSON.stringify(tables as string[]),
+  });
+  const eventSource = new EventSource(
+    `/api/updatedData`
+  );
 
   const { tablesMap, filters } = computeFilters(tables);
   const callback = (payload: PrismaPayload) => {
