@@ -1,13 +1,17 @@
 import { produce } from "solid-js/store";
-import { filters, setItems, tablesMap } from "../../utils";
+import { computeFilters, setItems } from "../../utils";
 
-import type { ClientProvider, PayloadSettings, PostgrestPayload } from "../../types";
+import type {
+  ClientProvider,
+  PayloadSettings,
+  PostgrestPayload,
+} from "../../types";
 
 async function pollFromPostgrest(
   baseUrl: string,
   tables: string[] = ["countries"],
   intervalSeconds: number = 5,
-  callback: (payload: PostgrestPayload) => void = () => { }
+  callback: (payload: PostgrestPayload) => void = () => {}
 ) {
   // Keep track of the last check time
   let lastCheckTime = new Date();
@@ -34,7 +38,11 @@ async function pollFromPostgrest(
           `${table}?&deleted_at=gte.${timestampDate}`
         );
 
-        const [created, updated, deleted] = await Promise.all([createdPromise, updatedPromise, deletedPromise])
+        const [created, updated, deleted] = await Promise.all([
+          createdPromise,
+          updatedPromise,
+          deletedPromise,
+        ]);
 
         // Add changes to our collection
         created.forEach((record: any) => {
@@ -88,7 +96,7 @@ export const postgrestConnector: ClientProvider<string, () => any> = (
   tables,
   set
 ) => {
-
+  const { filters, tablesMap } = computeFilters(tables)
   set(
     produce(async (state) => {
       for (const tableSelector of tables) {
@@ -124,16 +132,16 @@ export const postgrestConnector: ClientProvider<string, () => any> = (
       return table;
     }
   });
+  const settings: PayloadSettings<PostgrestPayload> = {
+    getNewId: (item) => item.new?.id,
+    getTable: (item) => item.table,
+    getType: (item) => item.type,
+    getNewItem: (item) => item.record,
+    getOldId: (item) => item.old?.id,
+    checkInsert: "INSERT",
+    checkUpdate: "UPDATE",
+  };
   pollFromPostgrest(client, postgrestTables, 5, (payload: PostgrestPayload) => {
-    const settings: PayloadSettings<typeof payload> = {
-      getNewId: (item) => item.new?.id,
-      getTable: (item) => item.table,
-      getType: (item) => item.type,
-      getNewItem: (item) => item.record,
-      getOldId: (item) => item.old?.id,
-      checkInsert: 'INSERT',
-      checkUpdate: 'UPDATE',
-    }
-    setItems(set, settings, payload)
-  })
+    setItems(set, settings, payload, filters, tablesMap);
+  });
 };

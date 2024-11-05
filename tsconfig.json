@@ -2,9 +2,10 @@
   "include": ["src"],
   "exclude": ["**/*.test.ts"],
   "compilerOptions": {
+    "jsx": "preserve",
     "module": "esnext",
     "target": "esnext",
-    "lib": ["esnext"],
+    "lib": ["esnext", "dom"],
     "declaration": true,
     "strict": true,
     "moduleResolution": "node",

@@ -1,14 +1,18 @@
-import { SupabaseClient } from "@supabase/supabase-js";
+import {
+  RealtimePostgresChangesPayload,
+  SupabaseClient,
+} from "@supabase/supabase-js";
 import { produce } from "solid-js/store";
-import { filters, setItems, tablesMap } from "../../utils";
+import { computeFilters, setItems } from "../../utils";
 
 import type { ClientProvider, PayloadSettings } from "../../types";
 
-export const supaConnector: ClientProvider<SupabaseClient, () => any[]> = (
+export const supaConnector: ClientProvider<SupabaseClient, () => any> = (
   client,
   tables,
   set
 ) => {
+  const { filters, tablesMap } = computeFilters(tables);
   set(
     produce(async (state) => {
       for (const tableSelector of tables) {
@@ -29,7 +33,19 @@ export const supaConnector: ClientProvider<SupabaseClient, () => any[]> = (
       }
     })
   );
-
+  const settings: PayloadSettings<
+    RealtimePostgresChangesPayload<{
+      [key: string]: any;
+    }>
+  > = {
+    getNewId: (item) => item.new?.id,
+    getTable: (item) => item.table,
+    getType: (item) => item.eventType,
+    getNewItem: (item) => item.new,
+    getOldId: (item) => item.old?.id,
+    checkInsert: "INSERT",
+    checkUpdate: "UPDATE",
+  };
   client
     .channel("schema-db-changes")
     .on(
@@ -39,18 +55,8 @@ export const supaConnector: ClientProvider<SupabaseClient, () => any[]> = (
         schema: "public",
       },
       (payload) => {
-        const settings: PayloadSettings<typeof payload> = {
-          getNewId: (item) => item.new?.id,
-          getTable: (item) => item.table,
-          getType: (item) => item.eventType,
-          getNewItem: (item) => item.new,
-          getOldId: (item) => item.old?.id,
-          checkInsert: 'INSERT',
-          checkUpdate: 'UPDATE',
-        }
-        setItems(set, settings, payload)
+        setItems(set, settings, payload, filters, tablesMap);
       }
     )
     .subscribe();
 };
-
