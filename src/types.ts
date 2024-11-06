@@ -14,7 +14,8 @@ export type TableSelector<X> = string | QueryType<X>;
 export type ClientProvider<T, X> = (
   client: T,
   tables: TableSelector<X>[],
-  set: SetStoreFunction<Record<string, any[]>>
+  set: SetStoreFunction<Record<string, any[]>>,
+  interval?: number
 ) => void;
 
 export interface PrismaPayload {
@@ -41,3 +42,14 @@ export interface PayloadSettings<T extends any> {
   checkUpdate: string
 }
 
+ 
+export type PrismaConnectClientPromise = Promise<
+  | {
+      loadedClient: any;
+      interval: number;
+    }
+  | {
+      loadedClient: PrismaPayload[];
+      interval: number;
+    }
+>;

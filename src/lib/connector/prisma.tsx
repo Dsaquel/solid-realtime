@@ -4,6 +4,7 @@ import { computeFilters, setItems } from "../../utils";
 import type {
   ClientProvider,
   PayloadSettings,
+  PrismaConnectClientPromise,
   PrismaPayload,
   QueryType,
 } from "../../types";
@@ -109,7 +110,7 @@ type ActionData = {
 async function pollDatabaseChanges(
   client: PrismaClient,
   tables: string[],
-  intervalSeconds: number = 5,
+  interval: number = 5000,
   sendUpdate: (data: any) => void
 ) {
   // Keep track of the last check time
@@ -130,9 +131,7 @@ async function pollDatabaseChanges(
       // Update the checkpoint
       lastCheckTime = currentCheckTime;
       // Wait for the specified interval
-      await new Promise((resolve) =>
-        setTimeout(resolve, intervalSeconds * 1000)
-      );
+      await new Promise((resolve) => setTimeout(resolve, interval));
     } catch (error) {
       console.error("Error while polling:", error);
       // Wait a bit before retrying after an error
@@ -141,7 +140,7 @@ async function pollDatabaseChanges(
   }
 }
 
-const pollDatabaseInit = async (
+const getInitialState = async (
   client: PrismaClient,
   tables: QueryType<() => Promise<any[]>>[]
 ) => {
@@ -183,7 +182,7 @@ const settings: PayloadSettings<PrismaPayload> = {
   checkUpdate: "UPDATE",
 };
 
-export const prismaConnector: ClientProvider<
+export const prismaConnectSSE: ClientProvider<
   SolidStartRoute,
   () => Promise<any[]>
 > = async (client, tables, set) => {
@@ -208,12 +207,13 @@ export const prismaConnector: ClientProvider<
   onCleanup(() => eventSource.close());
 };
 
-export const prismaInitSSE = async (
+export const prismaLoadSSE = async (
   client: PrismaClient,
-  tables: QueryType<() => Promise<any[]>>[]
+  tables: QueryType<() => Promise<any[]>>[],
+  interval?: number
 ) => {
-  const { sendUpdate, response } = createSSE();
-  const state = await pollDatabaseInit(client, tables);
+  const { sendUpdate, response } = createStream();
+  const state = await getInitialState(client, tables);
   sendUpdate({ state });
 
   const prismaTables = tables.map((table) => {
@@ -224,11 +224,11 @@ export const prismaInitSSE = async (
     }
   });
 
-  pollDatabaseChanges(client, prismaTables, 5, sendUpdate);
+  pollDatabaseChanges(client, prismaTables, interval ?? 5000, sendUpdate);
   return response;
 };
 
-function createSSE() {
+function createStream() {
   const { writable, readable } = new TransformStream();
   const writer = writable.getWriter();
 
@@ -256,18 +256,23 @@ function createSSE() {
  *
  * ## Example
  * ```
- * const prismaRealtimeClient = async (lastCheckTime?: Date) => {
+ * const prismaRealtimeClient: (lastCheckTime?: Date) => PrismaConnectClientPromise = async (lastCheckTime?: Date) => {
  * "use server";
- * return prismaInitAction(prisma, ["countries"], lastCheckTime);
- *};
+ * return prismaLoadState(prisma, ["countries"], lastCheckTime, 1000);
+};
  * ```
  */
-export const prismaInitAction = async (
+export const prismaLoadState = async (
   client: PrismaClient,
   tables: QueryType<() => Promise<any[]>>[],
-  lastCheckTime?: Date
+  lastCheckTime?: Date,
+  interval?: number
 ) => {
-  if (!lastCheckTime) return pollDatabaseInit(client, tables);
+  if (!lastCheckTime)
+    return {
+      loadedClient: await getInitialState(client, tables),
+      interval: interval ?? 5000,
+    };
 
   const prismaTables = tables.map((table) => {
     if (typeof table !== "string") {
@@ -277,11 +282,14 @@ export const prismaInitAction = async (
     }
   });
 
-  return getDatabaseChanges(client, prismaTables, lastCheckTime);
+  return {
+    loadedClient: await getDatabaseChanges(client, prismaTables, lastCheckTime),
+    interval: interval ?? 5000,
+  };
 };
 
-export const prismaConnector2: ClientProvider<
-  (lastCheckTime?: Date) => Promise<any | PrismaPayload[]>,
+export const prismaConnectFromClient: ClientProvider<
+  (lastCheckTime?: Date, interval?: number) => PrismaConnectClientPromise,
   () => Promise<any[]>
 > = async (client, tables, set) => {
   const { tablesMap, filters } = computeFilters(tables);
@@ -289,15 +297,19 @@ export const prismaConnector2: ClientProvider<
     setItems(set, settings, payload, filters, tablesMap);
   };
 
-  const state = await client();
-  set(state);
+  const { loadedClient: loadedStore, interval } = await client();
+  set(loadedStore as Record<string, any[]>);
 
   let lastCheckTime = new Date();
   setInterval(async () => {
-    for (const change of await client(lastCheckTime)) {
+    const { loadedClient: loadedPayloads } = await client(lastCheckTime);
+    const changes = loadedPayloads as PrismaPayload[];
+    console.log("CHANGES: ", changes);
+
+    for (const change of changes) {
       callback(change);
     }
     lastCheckTime = new Date();
     console.log("new checkpoint: ", lastCheckTime);
-  }, 5000);
+  }, interval ?? 5000);
 };
