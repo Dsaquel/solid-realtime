@@ -38,10 +38,12 @@ export const supaConnector: ClientProvider<SupabaseClient, () => any> = (
       [key: string]: any;
     }>
   > = {
-    getNewId: (item) => item.new?.id,
+    //@ts-ignore
+    getNewId: (item) => item.new.id,
     getTable: (item) => item.table,
     getType: (item) => item.eventType,
     getNewItem: (item) => item.new,
+    //@ts-ignore
     getOldId: (item) => item.old?.id,
     checkInsert: "INSERT",
     checkUpdate: "UPDATE",

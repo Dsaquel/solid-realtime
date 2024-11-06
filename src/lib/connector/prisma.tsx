@@ -1,7 +1,6 @@
 import { reconcile } from "solid-js/store";
 import { PrismaClient } from "@prisma/client";
 import { computeFilters, setItems } from "../../utils";
-
 import type {
   ClientProvider,
   PayloadSettings,
@@ -9,6 +8,7 @@ import type {
   QueryType,
 } from "../../types";
 import { onCleanup } from "solid-js";
+import { action, useAction, useSubmission } from "@solidjs/router";
 
 export async function softDelete(
   prisma: PrismaClient,
@@ -101,6 +101,11 @@ export async function getDatabaseChanges(
   return changes;
 }
 
+type ActionData = {
+  tables: string[];
+  lastCheckTime: Date;
+};
+
 async function pollDatabaseChanges(
   client: PrismaClient,
   tables: string[],
@@ -166,28 +171,24 @@ const pollDatabaseInit = async (
   return state;
 };
 
-type SolidStartClient = PrismaClient;
+type SolidStartRoute = string;
+
+const settings: PayloadSettings<PrismaPayload> = {
+  getNewId: (item) => item.record?.id,
+  getTable: (item) => item.table,
+  getType: (item) => item.type,
+  getNewItem: (item) => item.record,
+  getOldId: (item) => item.record?.id,
+  checkInsert: "INSERT",
+  checkUpdate: "UPDATE",
+};
 
 export const prismaConnector: ClientProvider<
-  SolidStartClient,
+  SolidStartRoute,
   () => Promise<any[]>
 > = async (client, tables, set) => {
-  const eventSourceParams = new URLSearchParams({
-    prisma: JSON.stringify(client),
-    tables: JSON.stringify(tables as string[]),
-  });
-  const eventSource = new EventSource(`/api/updatedData`);
-
+  const eventSource = new EventSource(client);
   const { tablesMap, filters } = computeFilters(tables);
-  const settings: PayloadSettings<PrismaPayload> = {
-    getNewId: (item) => item.record?.id,
-    getTable: (item) => item.table,
-    getType: (item) => item.type,
-    getNewItem: (item) => item.record,
-    getOldId: (item) => item.record?.id,
-    checkInsert: "INSERT",
-    checkUpdate: "UPDATE",
-  };
   const callback = (payload: PrismaPayload) => {
     setItems(set, settings, payload, filters, tablesMap);
   };
@@ -249,3 +250,54 @@ function createSSE() {
     sendUpdate,
   };
 }
+
+/**
+ * Setup function to produce a prisma client in a solid start context. You have to wrap it in a server function
+ *
+ * ## Example
+ * ```
+ * const prismaRealtimeClient = async (lastCheckTime?: Date) => {
+ * "use server";
+ * return prismaInitAction(prisma, ["countries"], lastCheckTime);
+ *};
+ * ```
+ */
+export const prismaInitAction = async (
+  client: PrismaClient,
+  tables: QueryType<() => Promise<any[]>>[],
+  lastCheckTime?: Date
+) => {
+  if (!lastCheckTime) return pollDatabaseInit(client, tables);
+
+  const prismaTables = tables.map((table) => {
+    if (typeof table !== "string") {
+      return table.table;
+    } else {
+      return table;
+    }
+  });
+
+  return getDatabaseChanges(client, prismaTables, lastCheckTime);
+};
+
+export const prismaConnector2: ClientProvider<
+  (lastCheckTime?: Date) => Promise<any | PrismaPayload[]>,
+  () => Promise<any[]>
+> = async (client, tables, set) => {
+  const { tablesMap, filters } = computeFilters(tables);
+  const callback = (payload: PrismaPayload) => {
+    setItems(set, settings, payload, filters, tablesMap);
+  };
+
+  const state = await client();
+  set(state);
+
+  let lastCheckTime = new Date();
+  setInterval(async () => {
+    for (const change of await client(lastCheckTime)) {
+      callback(change);
+    }
+    lastCheckTime = new Date();
+    console.log("new checkpoint: ", lastCheckTime);
+  }, 5000);
+};

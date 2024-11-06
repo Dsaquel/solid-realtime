@@ -132,16 +132,16 @@ export const postgrestConnector: ClientProvider<string, () => any> = (
       return table;
     }
   });
-  const settings: PayloadSettings<PostgrestPayload> = {
-    getNewId: (item) => item.new?.id,
-    getTable: (item) => item.table,
-    getType: (item) => item.type,
-    getNewItem: (item) => item.record,
-    getOldId: (item) => item.old?.id,
-    checkInsert: "INSERT",
-    checkUpdate: "UPDATE",
-  };
   pollFromPostgrest(client, postgrestTables, 5, (payload: PostgrestPayload) => {
+    const settings: PayloadSettings<typeof payload> = {
+      getNewId: (item) => item.record?.id,
+      getTable: (item) => item.table,
+      getType: (item) => item.type,
+      getNewItem: (item) => item.record,
+      getOldId: (item) => item.record?.id,
+      checkInsert: "INSERT",
+      checkUpdate: "UPDATE",
+    };
     setItems(set, settings, payload, filters, tablesMap);
   });
 };

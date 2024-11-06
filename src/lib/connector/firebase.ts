@@ -40,7 +40,7 @@ export const firestoreConnector: ClientProvider<
     const settings: PayloadSettings<
       DocumentChange<DocumentData, DocumentData>
     > = {
-      getNewId: (item) => item.new?.id,
+      getNewId: (item) => item.doc.id,
       getTable: (_) => name,
       getType: (item) => item.type,
       getNewItem: (item) => item.doc,
