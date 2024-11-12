@@ -42,7 +42,7 @@ export interface PayloadSettings<T extends any> {
   checkUpdate: string
 }
 
- 
+
 export type PrismaConnectClientPromise = Promise<
   | {
       loadedClient: any;
