@@ -1,6 +1,6 @@
 # Solid Realtime for Prisma
 
-First, it is important to note that Solid-Realtime for Prisma only works with Solid Start projects. So far, we can only guarantee results on Postgres and SQLite databases. However, you're free to try it on other types of databases and let us know about the outcome.
+First, it is important to note that Solid-Realtime for Prisma is designed to work with Solid Start projects. So far, we can only guarantee results on Postgres and SQLite databases. However, you're free to try it on other databases and let us know about the outcome.
 
 There are two different ways to integrate Solid Realtime with Prisma:
 

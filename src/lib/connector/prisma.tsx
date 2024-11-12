@@ -101,11 +101,6 @@ export async function getDatabaseChanges(
   return changes;
 }
 
-type ActionData = {
-  tables: string[];
-  lastCheckTime: Date;
-};
-
 async function pollDatabaseChanges(
   client: PrismaClient,
   tables: string[],
@@ -227,7 +222,7 @@ export const prismaLoadSSE = async (
   return response;
 };
 
-function createStream() {
+export function createStream() {
   const { writable, readable } = new TransformStream();
   const writer = writable.getWriter();
 

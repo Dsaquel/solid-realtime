@@ -21,7 +21,7 @@ export const computeFilters = (tables: QueryType<() => Promise<any[]>>[]) => {
 
     // Notify clients about initial data
     // sendUpdate({ store: { [name]: state[name] } });
-    console.log("INITIAL DATA: ", name, state[name]);
+    // console.log("INITIAL DATA: ", name, state[name]);
   }
   return {
     tablesMap,

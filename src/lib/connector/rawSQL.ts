@@ -20,6 +20,7 @@ async function pollFromPostgrest(
     try {
       const changes: PostgrestPayload[] = [];
       const currentCheckTime = new Date();
+      console.log("new checkpoint:", currentCheckTime);
       const timestampDate = lastCheckTime.toISOString();
 
       for (const table of tables) {
