@@ -16,53 +16,53 @@ export default defineConfig({
     root: {
       label: "English",
       lang: "en",
-      link: "/en/",
+      link: "/",
 
       themeConfig: {
         nav: [
-          { text: "Home", link: "/en/" },
-          { text: "Introduction", link: "/en/introduction" },
+          { text: "Home", link: "/" },
+          { text: "Introduction", link: "/introduction" },
         ],
 
         socialLinks: [
-          { icon: "github", link: "https://github.com/vuejs/vitepress" },
+          { icon: "github", link: "https://github.com/Dsaquel/solid-realtime" },
         ],
 
         sidebar: [
           {
             text: "Documentation",
             items: [
-              { text: "Introduction", link: "/en/introduction" },
-              { text: "Usage", link: "/en/usage" },
+              { text: "Introduction", link: "/introduction" },
+              { text: "Usage", link: "/usage" },
             ],
           },
           {
             text: "Guides",
             items: [
-              { text: "Getting Started", link: "/en/getting-started" },
+              { text: "Getting Started", link: "/getting-started" },
               {
                 text: "Configuration Supabase",
-                link: "/en/configuration-supabase",
+                link: "/configuration-supabase",
               },
               {
                 text: "Configuration Firebase",
-                link: "/en/configuration-firebase",
+                link: "/configuration-firebase",
               },
               {
                 text: "Configuration Prisma",
-                link: "/en/configuration-prisma",
+                link: "/configuration-prisma",
               },
               {
                 text: "Configuration RawSQL",
-                link: "/en/configuration-rawsql",
+                link: "/configuration-rawsql",
               },
             ],
           },
           {
             text: "Support",
             items: [
-              { text: "FAQ", link: "/en/faq" },
-              { text: "Contribute", link: "/en/contribute" },
+              { text: "FAQ", link: "/faq" },
+              { text: "Contribute", link: "/contribute" },
             ],
           },
         ],
@@ -102,7 +102,7 @@ export default defineConfig({
       },
     },
     editLink: {
-      pattern: "https://dev.pages.nukk.ai/nukkui/docs/:path",
+      pattern: "https://github.com/Dsaquel/solid-realtime/docs/:path",
       text: "Edit this page on GitHub",
     },
   },

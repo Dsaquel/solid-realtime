@@ -8,10 +8,10 @@ hero:
   actions:
     - theme: brand
       text: Getting Started
-      link: /en/getting-started
+      link: /getting-started
     - theme: alt
       text: Introduction
-      link: /en/introduction
+      link: /introduction
 
 features:
   - title: Simplify use
