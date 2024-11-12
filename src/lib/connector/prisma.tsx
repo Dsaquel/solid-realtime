@@ -9,7 +9,6 @@ import type {
   QueryType,
 } from "../../types";
 import { onCleanup } from "solid-js";
-import { action, useAction, useSubmission } from "@solidjs/router";
 
 export async function softDelete(
   prisma: PrismaClient,
