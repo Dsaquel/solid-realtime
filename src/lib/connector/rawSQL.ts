@@ -9,7 +9,7 @@ import type {
 
 async function pollFromPostgrest(
   baseUrl: string,
-  tables: string[] = ["countries"],
+  tables: string[],
   intervalSeconds: number = 5,
   callback: (payload: PostgrestPayload) => void = () => {}
 ) {
