@@ -15,6 +15,7 @@ export const supaConnector: ClientProvider<SupabaseClient, () => any> = (
   const { filters, tablesMap } = computeFilters(tables);
   set(
     produce(async (state) => {
+      // console.log("TABLES: ", tables)
       for (const tableSelector of tables) {
         let name, query, table: string;
         if (typeof tableSelector !== "string") {
@@ -28,7 +29,7 @@ export const supaConnector: ClientProvider<SupabaseClient, () => any> = (
           query = async () => (await client.from(table).select()).data!;
         }
 
-        tablesMap.get(table)?.push(name) || tablesMap.set(table, [name]);
+        // tablesMap.get(table)?.push(name) ?? tablesMap.set(table, [name]);
         state[name] = (await query?.()) ?? [];
       }
     })
