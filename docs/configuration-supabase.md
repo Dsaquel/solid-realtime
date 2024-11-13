@@ -2,7 +2,7 @@
 
 In this tutorial, we will use the following data schema:
 
-```
+```md
 table countries {
     id: number PRIMARY KEY,
     name: string,
@@ -16,7 +16,7 @@ To set up your Solid.js project with Supabase, you need two environment variable
 
 In your Solid.js project's `.env` file, assign these two variables with your Supabase credentials.
 
-```
+```md
 SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
 ```
@@ -148,6 +148,6 @@ const query1 = async () => {
 
 Here, query1 is the list of countries starting with ther letter 'C', and query2 the list of countries with a GDP above 100.
 
-If you want to see this example come to life, you can watch this short demo below: 
+If you want to see this example come to life, you can watch this short demo below:
 
-<video controls="controls"src="./vid/solid-realtime-supabase-demo.mp4" />
+<video controls="controls" src="./vid/solid-realtime-supabase-demo.mp4" />
