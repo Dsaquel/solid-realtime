@@ -1,5 +1,9 @@
 # Solid Realtime for Prisma
 
+With Solid Realtime, fine-grained reactivity at the database level is possible. In a production application, it looks like this:
+
+<video controls="controls"src="./vid/solid-realtime-prisma-demo.mp4" />
+
 First, it is important to note that Solid-Realtime for Prisma is designed to work with Solid Start projects. So far, we can only guarantee results on Postgres and SQLite databases. However, you're free to try it on other databases and let us know about the outcome.
 
 There are two different ways to integrate Solid Realtime with Prisma:
