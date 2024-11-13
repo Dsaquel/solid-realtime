@@ -101,7 +101,7 @@ After configuring firebase:
 
 5. You can now use data from your Firebase database in your Solid project, which will be updated in real time like this:
 
-    <video controls="controls" src="./vid/solid-realtime-firebase-demo.mp4" />
+    <video controls="controls" src="/vid/solid-realtime-firebase-demo.mp4" />
 
 For more information on Firebase, visit the [Firebase documentation](https://firebase.google.com/docs).
 
