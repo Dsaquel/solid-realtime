@@ -17,7 +17,7 @@ export const computeFilters = (tables: QueryType<() => Promise<any[]>>[]) => {
       table = tableSelector;
     }
 
-    tablesMap.get(table)?.push(name) || tablesMap.set(table, [name]);
+    tablesMap.get(table)?.push(name) ?? tablesMap.set(table, [name]);
 
     // Notify clients about initial data
     // sendUpdate({ store: { [name]: state[name] } });
@@ -67,9 +67,11 @@ export const setItems = <T>(
     produce((state) => {
       for (const name of tablesMap.get(table) ?? []) {
         const filter = filters[name] ?? (() => true);
+        // console.log("TABLES_MAP", tablesMap)
         if (type === checkInsert) {
           if (filter(newItem)) {
             addElement(state[name], newItem);
+            // console.log("Added Element")
           }
         } else if (type === checkUpdate) {
           const idx = state[name].findIndex((s) => s.id === newId);
