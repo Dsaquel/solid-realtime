@@ -1,6 +1,6 @@
 {
   "name": "solid-realtime",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Solid Realtime is a library that allows you to connect and manage real-time data from different services like Supabase, Firebase, etc.",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -17,7 +17,7 @@
     "typescript",
     "library"
   ],
-  "author": "",
+  "author": {},
   "license": "MIT",
   "repository": {
     "type": "git",
