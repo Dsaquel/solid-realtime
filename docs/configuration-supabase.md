@@ -146,7 +146,13 @@ const query1 = async () => {
 }
 ```
 
-Here, query1 is the list of countries starting with ther letter 'C', and query2 the list of countries with a GDP above 100.
+Here, ``query1`` is the list of countries starting with ther letter 'C', and ``query2`` the list of countries with a GDP above 100.
+
+In the objects passed to the list of table queries:
+- ``name`` The alias for the query result
+- `table` The table name
+- `query` The Supabase query
+- `filter` The javascript predicate corresponding to the Supabase query
 
 If you want to see this example come to life, you can watch this short demo below:
 
