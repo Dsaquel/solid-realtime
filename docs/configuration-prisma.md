@@ -12,13 +12,13 @@ For any table you want to track in your database, **regardless of the pattern yo
 - Name your id columns `id`
 - Add the following columns to your table in your Prisma schema:
 
-```
+```prisma
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 ```
 
-### The client-side pattern:
+## The client-side pattern
 
 In the client-side pattern, the client polls the server which fetches the database's initial state and, at each client requests, retrieves a list of eventual changes.
 
@@ -106,7 +106,7 @@ The client-side pattern only supports simple Prisma clients which means that it 
     }
     ```
 
-### The SSE pattern:
+## The SSE pattern
 
 In the SSE pattern, the server poll the database and, in the case of a change, sends an event to the client which rerenders a new store containing the changes.
 

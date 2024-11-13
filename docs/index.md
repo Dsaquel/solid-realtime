@@ -18,5 +18,7 @@ features:
     details: Simplifies integration and usage of services like Firebase, Supabase, etc.
   - title: Real-time update
     details: Allows data to be updated in real time.
+  - title: Scalable
+    details: Scale to multiple servers and send events to all connected clients with ease.
 ---
 
