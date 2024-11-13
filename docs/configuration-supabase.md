@@ -150,4 +150,4 @@ Here, query1 is the list of countries starting with ther letter 'C', and query2 
 
 If you want to see this example come to life, you can watch this short demo below:
 
-<video controls="controls" src="./vid/solid-realtime-supabase-demo.mp4" />
+<video controls="controls" src="/vid/solid-realtime-supabase-demo.mp4" />
